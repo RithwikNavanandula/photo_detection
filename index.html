@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Label Scanner">
+    <title>Label Scanner</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>📷 Label Scanner</h1>
+            <p>Scan product labels instantly</p>
+        </header>
+
+        <!-- Quick Mode Toggle -->
+        <div class="controls">
+            <label class="quick-mode">
+                <input type="checkbox" id="quick-mode">
+                <span>🚀 Quick Mode</span>
+                <small>(ON = skip cropping, faster but less accurate)</small>
+            </label>
+        </div>
+
+        <!-- Upload Button -->
+        <div class="upload-section">
+            <label for="file-input" class="upload-btn">📁 Choose Image</label>
+            <input type="file" id="file-input" accept="image/*" capture="environment">
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p id="loading-text">Processing...</p>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="results hidden">
+            <h2>📋 Results</h2>
+
+            <!-- Photo Preview -->
+            <img id="preview" class="preview" src="" alt="Preview">
+
+            <!-- Data Fields (Editable) -->
+            <div class="field">
+                <label>🔢 Batch No</label>
+                <input type="text" id="batch" placeholder="Not found">
+                <span id="conf-batch" class="badge"></span>
+            </div>
+            <div class="field">
+                <label>📅 Mfg Date</label>
+                <input type="text" id="mfg" placeholder="Not found">
+                <span id="conf-mfg" class="badge"></span>
+            </div>
+            <div class="field">
+                <label>⏰ Expiry Date</label>
+                <input type="text" id="expiry" placeholder="Not found">
+                <span id="conf-expiry" class="badge"></span>
+            </div>
+            <div class="field">
+                <label>🍹 Flavour</label>
+                <input type="text" id="flavour" placeholder="Not found">
+            </div>
+            <div class="field location-field">
+                <label>🗄️ Rack No</label>
+                <input type="text" id="rack-no" list="rack-list" placeholder="Type or select...">
+                <datalist id="rack-list">
+                    <option value="Rack 1">
+                    <option value="Rack 2">
+                    <option value="Rack 3">
+                    <option value="Rack 4">
+                    <option value="Rack 5">
+                </datalist>
+            </div>
+            <div class="field location-field">
+                <label>📚 Shelf No</label>
+                <input type="text" id="shelf-no" list="shelf-list" placeholder="Type or select...">
+                <datalist id="shelf-list">
+                    <option value="Shelf A">
+                    <option value="Shelf B">
+                    <option value="Shelf C">
+                    <option value="Shelf D">
+                    <option value="Shelf E">
+                </datalist>
+            </div>
+
+            <!-- Actions -->
+            <div class="actions">
+                <button id="save-btn" class="btn save">💾 Save</button>
+                <button id="sheets-btn" class="btn sheets">📊 Send to Sheets</button>
+            </div>
+            <div class="actions">
+                <button id="clear-btn" class="btn clear">🔄 New Scan</button>
+            </div>
+
+            <!-- Continuous Mode -->
+            <label class="continuous">
+                <input type="checkbox" id="continuous">
+                <span>⚡ Auto-save & next</span>
+            </label>
+
+            <!-- Raw OCR -->
+            <details class="raw-section">
+                <summary>📝 Raw OCR Text</summary>
+                <pre id="raw-text"></pre>
+            </details>
+        </div>
+
+        <!-- History -->
+        <div class="history-section">
+            <div class="history-header">
+                <h2>📚 History</h2>
+                <div class="export-buttons">
+                    <button id="download-btn" class="btn export">📥 Download</button>
+                    <button id="email-btn" class="btn export email">📧 Email</button>
+                </div>
+            </div>
+            <input type="text" id="search" class="search" placeholder="🔍 Search...">
+            <div id="history-list" class="history-list">
+                <p class="empty">No scans yet</p>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>✂️ Crop Label</h3>
+            <p>Drag box to select label area</p>
+            <div id="crop-container" class="crop-container">
+                <img id="crop-image" src="" alt="Crop">
+                <div id="crop-box" class="crop-box"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="crop-skip" class="btn">❌ Skip</button>
+                <button id="crop-confirm" class="btn save">✅ Crop</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Modal -->
+    <div id="email-modal" class="modal hidden">
+        <div class="modal-content email-modal-content">
+            <h3>📧 Email Export</h3>
+            <p>Send scan history as CSV to an email address</p>
+            <div class="email-form">
+                <div class="field email-field">
+                    <label>📬 To:</label>
+                    <input type="email" id="email-recipient" placeholder="Enter email address">
+                </div>
+                <div class="email-summary" id="email-summary">
+                    <!-- Summary will be populated dynamically -->
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="email-cancel" class="btn clear">❌ Cancel</button>
+                <button id="email-send" class="btn save">📤 Send Email</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="js/ocr.js"></script>
+    <script src="js/app.js"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        // Register Service Worker for offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register('./sw.js');
+                    console.log('✅ Service Worker registered:', registration.scope);
+                } catch (err) {
+                    console.log('❌ Service Worker registration failed:', err);
+                }
+            });
+        }
+
+        // Offline/Online status indicator
+        function updateOnlineStatus() {
+            const isOnline = navigator.onLine;
+            const indicator = document.getElementById('offline-indicator');
+            if (indicator) {
+                indicator.style.display = isOnline ? 'none' : 'flex';
+            }
+            console.log(isOnline ? '🌐 Online' : '📴 Offline');
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        document.addEventListener('DOMContentLoaded', updateOnlineStatus);
+    </script>
+
+    <!-- Offline Indicator Banner -->
+    <div id="offline-indicator"
+        style="display: none; position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, #ff6b6b, #ee5a24); color: white; padding: 8px 16px; text-align: center; font-size: 14px; font-weight: 600; z-index: 10000; align-items: center; justify-content: center; gap: 8px;">
+        📴 Offline Mode - OCR will use local processing
+    </div>
+</body>
+
+</html>

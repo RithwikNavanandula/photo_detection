@@ -1,0 +1,72 @@
+// ================================================
+// GOOGLE APPS SCRIPT - Email with CSV Attachment
+// ================================================
+// 
+// This script sends emails with CSV file attachments
+// using your Gmail account (100 emails/day free)
+//
+// STEP 1: Create a NEW Google Apps Script Project
+// - Go to https://script.google.com
+// - Click "New Project"
+// - Delete any existing code
+// - Copy and paste the entire code below:
+
+// ========== COPY FROM HERE ==========
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    
+    // Create CSV file as blob
+    var csvBlob = Utilities.newBlob(data.csv_data, 'text/csv', data.filename || 'export.csv');
+    
+    // Send email with attachment
+    GmailApp.sendEmail(
+      data.to_email,
+      data.subject || 'Label Scanner Export',
+      data.message || 'Please find the CSV export attached.',
+      {
+        attachments: [csvBlob],
+        name: 'Label Scanner'
+      }
+    );
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: 'Email sent successfully'
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput('Label Scanner Email API is running');
+}
+
+// ========== COPY UNTIL HERE ==========
+
+// STEP 2: Deploy as Web App
+// - Click the "Deploy" button (top right)
+// - Select "New deployment"
+// - Click the gear icon → Select "Web app"
+// - Settings:
+//   - Description: Label Scanner Email
+//   - Execute as: Me
+//   - Who has access: Anyone
+// - Click "Deploy"
+// - Click "Authorize access" and allow permissions
+//   (You'll need to click "Advanced" → "Go to project (unsafe)" → "Allow")
+// - COPY THE WEB APP URL
+//
+// STEP 3: Add URL to App
+// - Open js/app.js
+// - Find this line near the top:
+//   GMAIL_EMAIL_URL: '',
+// - Paste your Web App URL between the quotes
+//
+// DONE! Now click "Email" → enter recipient → CSV will be sent as attachment!
