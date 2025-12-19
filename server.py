@@ -40,21 +40,30 @@ def init_db():
         )
     ''')
     
+    # Add verified column if it doesn't exist (migration for existing databases)
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 0')
+    except:
+        pass  # Column already exists
+    
     # Check if users exist
     cursor.execute('SELECT COUNT(*) FROM users')
     if cursor.fetchone()[0] == 0:
-        # Add default users
+        # Add default users (verified = 1)
         users = [
-            ('admin', hash_password('admin123'), 'Administrator', 'admin'),
-            ('user1', hash_password('user123'), 'User One', 'user')
+            ('admin', hash_password('admin123'), 'Administrator', 'admin', 1),
+            ('user1', hash_password('user123'), 'User One', 'user', 1)
         ]
         cursor.executemany(
-            'INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)',
+            'INSERT INTO users (username, password, name, role, verified) VALUES (?, ?, ?, ?, ?)',
             users
         )
         print('Default users created:')
         print('  admin / admin123')
         print('  user1 / user123')
+    else:
+        # Verify existing default users (admin and user1)
+        cursor.execute('UPDATE users SET verified = 1 WHERE username IN (?, ?)', ('admin', 'user1'))
     
     conn.commit()
     conn.close()
