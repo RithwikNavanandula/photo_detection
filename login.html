@@ -169,7 +169,51 @@
         </form>
 
         <div class="footer">
+            <p id="toggle-register">Don't have an account? <a href="#" onclick="toggleForm()">Create one</a></p>
+        </div>
+        <div class="footer">
             Label Scanner v2.0
+        </div>
+    </div>
+
+    <!-- Register Form (Hidden by default) -->
+    <div class="login-container" id="register-container" style="display:none;">
+        <div class="logo">
+            <h1>📝 Create Account</h1>
+            <p>Register a new account</p>
+        </div>
+
+        <div id="register-error" class="error-msg"></div>
+        <div id="register-success" class="error-msg"
+            style="background: rgba(16,185,129,0.1); border-color: #10b981; color: #10b981;"></div>
+
+        <form id="register-form">
+            <div class="form-group">
+                <label for="reg-username">👤 Username</label>
+                <input type="text" id="reg-username" placeholder="Choose a username" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-password">🔒 Password</label>
+                <input type="password" id="reg-password" placeholder="Choose a password" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-role">👔 Role</label>
+                <select id="reg-role"
+                    style="width:100%;padding:14px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);font-size:1rem;">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+
+            <button type="submit" class="login-btn" id="register-btn">
+                Create Account
+            </button>
+        </form>
+
+        <div class="footer">
+            <p>Already have an account? <a href="#" onclick="toggleForm()">Sign in</a></p>
         </div>
     </div>
 
@@ -225,6 +269,65 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Sign In';
+            }
+        });
+
+        // Toggle between login and register forms
+        function toggleForm() {
+            const loginContainer = document.querySelector('.login-container:first-of-type');
+            const registerContainer = document.getElementById('register-container');
+
+            if (registerContainer.style.display === 'none') {
+                loginContainer.style.display = 'none';
+                registerContainer.style.display = 'block';
+            } else {
+                loginContainer.style.display = 'block';
+                registerContainer.style.display = 'none';
+            }
+        }
+
+        // Register form handler
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const btn = document.getElementById('register-btn');
+            const errorEl = document.getElementById('register-error');
+            const successEl = document.getElementById('register-success');
+            const username = document.getElementById('reg-username').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const role = document.getElementById('reg-role').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            errorEl.classList.remove('show');
+            successEl.classList.remove('show');
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, role })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    successEl.textContent = '✅ Account created! You can now sign in.';
+                    successEl.classList.add('show');
+                    document.getElementById('register-form').reset();
+
+                    // Auto-switch to login after 2 seconds
+                    setTimeout(() => toggleForm(), 2000);
+                } else {
+                    errorEl.textContent = data.error || 'Registration failed';
+                    errorEl.classList.add('show');
+                }
+            } catch (err) {
+                errorEl.textContent = 'Connection error. Please try again.';
+                errorEl.classList.add('show');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create Account';
             }
         });
     </script>

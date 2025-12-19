@@ -89,6 +89,48 @@ def login():
     else:
         return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
 
+@app.route('/api/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    role = data.get('role', 'user')
+    
+    if not username or not password:
+        return jsonify({'success': False, 'error': 'Username and password required'}), 400
+    
+    if len(username) < 3:
+        return jsonify({'success': False, 'error': 'Username must be at least 3 characters'}), 400
+    
+    if len(password) < 4:
+        return jsonify({'success': False, 'error': 'Password must be at least 4 characters'}), 400
+    
+    # Only allow 'user' or 'admin' roles
+    if role not in ['user', 'admin']:
+        role = 'user'
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Check if username exists
+    cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'error': 'Username already taken'}), 400
+    
+    # Create user
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    cursor.execute('''
+        INSERT INTO users (username, password, name, role, active)
+        VALUES (?, ?, ?, ?, 1)
+    ''', (username, password_hash, username.title(), role))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'message': 'Account created successfully'})
+
 @app.route('/api/users', methods=['GET'])
 def list_users():
     """Admin only: list all users"""
