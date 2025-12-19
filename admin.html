@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Label Scanner</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card: #16213e;
+            --accent: #00d4ff;
+            --accent2: #7c3aed;
+            --text: #ffffff;
+            --text2: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg) 0%, #0f0f23 100%);
+            min-height: 100vh;
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .btn-upload {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-analytics {
+            background: linear-gradient(135deg, #7c3aed, #5b21b6);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+
+        /* Dashboard Grid - 3 Column Layout */
+        .dashboard-3col {
+            display: grid;
+            grid-template-columns: 300px 1fr 320px;
+            gap: 16px;
+            min-height: 500px;
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-3col {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .activity-panel {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-3col {
+                grid-template-columns: 1fr;
+            }
+
+            .activity-panel {
+                grid-column: span 1;
+            }
+        }
+
+        .rack-panel,
+        .detail-panel,
+        .activity-panel {
+            max-height: 550px;
+            overflow-y: auto;
+        }
+
+        /* Card */
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Rack Grid */
+        .rack-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
+        }
+
+        .rack-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .rack-item.full {
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .rack-item.partial {
+            border-color: var(--warning);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .rack-item.empty {
+            border-color: var(--text2);
+            background: rgba(148, 163, 184, 0.1);
+        }
+
+        .rack-name {
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .rack-count {
+            font-size: 0.75rem;
+            color: var(--text2);
+        }
+
+        .rack-status {
+            font-size: 0.7rem;
+            margin-top: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .rack-item.full .rack-status {
+            background: var(--success);
+            color: white;
+        }
+
+        .rack-item.partial .rack-status {
+            background: var(--warning);
+            color: black;
+        }
+
+        .rack-item.empty .rack-status {
+            background: var(--text2);
+            color: var(--bg);
+        }
+
+        .rack-item {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .rack-item:hover {
+            transform: scale(1.03);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .rack-item.selected {
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+        }
+
+        /* Shelf Details Panel */
+        .shelf-details {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .selected-rack-title {
+            padding: 12px;
+            background: linear-gradient(90deg, rgba(124, 58, 237, 0.3), rgba(0, 212, 255, 0.2));
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        /* Shelf Dropdown - Redesigned */
+        .shelf-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: -10px;
+            right: -10px;
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 2px solid var(--accent);
+            border-radius: 12px;
+            margin-top: 8px;
+            padding: 16px;
+            z-index: 100;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .rack-item.expanded .shelf-dropdown {
+            display: block;
+        }
+
+        .rack-item.expanded {
+            z-index: 50;
+        }
+
+        /* Shelf Section */
+        .shelf-section {
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .shelf-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .shelf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: linear-gradient(90deg, rgba(124, 58, 237, 0.3), rgba(0, 212, 255, 0.2));
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .shelf-name {
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .shelf-count {
+            font-weight: 700;
+            color: #fff;
+            padding: 4px 12px;
+            background: var(--accent);
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .shelf-count.empty {
+            color: var(--text2);
+            background: rgba(148, 163, 184, 0.3);
+        }
+
+        /* Shelf Items Container */
+        .shelf-items {
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .shelf-items:empty::after {
+            content: 'No items on this shelf';
+            color: var(--text2);
+            font-style: italic;
+        }
+
+        /* Item Card */
+        .item-detail {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .item-detail:last-child {
+            margin-bottom: 0;
+        }
+
+        .item-detail:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .item-info {
+            flex: 1;
+        }
+
+        .item-batch {
+            font-weight: 700;
+            color: #fff;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .item-dates {
+            color: var(--text2);
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .item-dates span {
+            display: inline-block;
+            margin-right: 12px;
+        }
+
+        .item-movement {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 12px;
+        }
+
+        .item-movement.in {
+            background: rgba(16, 185, 129, 0.3);
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+
+        .item-movement.out {
+            background: rgba(245, 158, 11, 0.3);
+            color: #f59e0b;
+            border: 1px solid #f59e0b;
+        }
+
+        /* Toggle Button */
+        .toggle-btn {
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            padding: 6px 10px;
+            margin-left: 8px;
+            transition: all 0.2s;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        .toggle-btn:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .toggle-btn.out {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+        }
+
+        .toggle-btn.out:hover {
+            background: #ef4444;
+        }
+
+        .toggle-btn.in {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: #10b981;
+        }
+
+        .toggle-btn.in:hover {
+            background: #10b981;
+        }
+
+        /* Add Item Button */
+        .add-item-btn {
+            background: rgba(124, 58, 237, 0.3);
+            border: 1px solid #7c3aed;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            margin-left: auto;
+            color: #fff;
+            transition: all 0.2s;
+        }
+
+        .add-item-btn:hover {
+            background: #7c3aed;
+        }
+
+        /* Empty shelf message */
+        .empty-shelf {
+            padding: 16px;
+            text-align: center;
+            color: var(--text2);
+            font-style: italic;
+        }
+
+        /* Activity List */
+        .activity-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.in {
+            background: rgba(16, 185, 129, 0.2);
+        }
+
+        .activity-icon.out {
+            background: rgba(245, 158, 11, 0.2);
+        }
+
+        .activity-details {
+            flex: 1;
+        }
+
+        .activity-text {
+            font-size: 0.85rem;
+            margin-bottom: 2px;
+        }
+
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--text2);
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text2);
+            margin-top: 4px;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text2);
+        }
+
+        /* No data */
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: var(--text2);
+            font-size: 0.9rem;
+        }
+
+        /* Activity Actions */
+        .activity-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 4px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .action-btn:hover {
+            opacity: 1;
+        }
+
+        /* Edit Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: var(--card);
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--text2);
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Auth Check -->
+    <script>
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+            window.location.href = '/';
+        } else {
+            const user = JSON.parse(userData);
+            if (user.role !== 'admin') {
+                alert('Access denied. Admin only.');
+                window.location.href = '/app';
+            }
+        }
+    </script>
+
+    <div class="container">
+        <header class="header">
+            <div>
+                <h1>🛠️ Admin Dashboard</h1>
+            </div>
+            <div class="header-actions">
+                <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+                <button class="btn btn-upload" onclick="document.getElementById('csv-upload').click()">📤 Upload
+                    CSV</button>
+                <button class="btn btn-analytics" onclick="location.href='/analytics'">📊 Analytics</button>
+                <button class="btn btn-secondary" onclick="location.href='/app'">📷 Scanner</button>
+                <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
+            </div>
+        </header>
+
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="current-stock">-</div>
+                <div class="stat-label">📦 Current Stock</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-scans">-</div>
+                <div class="stat-label">Total Scans</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-in">-</div>
+                <div class="stat-label">⬇️ Items In</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-out">-</div>
+                <div class="stat-label">⬆️ Items Out</div>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid - 3 Column Layout -->
+        <div class="dashboard-3col">
+            <!-- Column 1: Rack Status -->
+            <div class="card rack-panel">
+                <h2>🗄️ Rack Status</h2>
+                <div id="rack-grid" class="rack-grid">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Column 2: Selected Rack Details -->
+            <div class="card detail-panel">
+                <h2>📦 Shelf Details</h2>
+                <div id="shelf-details" class="shelf-details">
+                    <div class="no-data">Click on a rack to see shelves</div>
+                </div>
+            </div>
+
+            <!-- Column 3: Recent Activity -->
+            <div class="card activity-panel">
+                <h2>📋 Recent Activity</h2>
+                <div id="activity-list" class="activity-list">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>✏️ Edit Scan</h3>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id">
+                <div class="form-group">
+                    <label>Batch No</label>
+                    <input type="text" id="edit-batch" placeholder="Batch number">
+                </div>
+                <div class="form-group">
+                    <label>Rack No</label>
+                    <input type="text" id="edit-rack" placeholder="Rack number">
+                </div>
+                <div class="form-group">
+                    <label>Shelf No</label>
+                    <input type="text" id="edit-shelf" placeholder="Shelf number">
+                </div>
+                <div class="form-group">
+                    <label>Movement</label>
+                    <select id="edit-movement">
+                        <option value="IN">⬇️ IN</option>
+                        <option value="OUT">⬆️ OUT</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">💾 Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load dashboard data
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/admin/dashboard');
+                const data = await response.json();
+
+                // Update stats
+                document.getElementById('current-stock').textContent = data.stats.current;
+                document.getElementById('total-scans').textContent = data.stats.total;
+                document.getElementById('total-in').textContent = data.stats.in;
+                document.getElementById('total-out').textContent = data.stats.out;
+
+                // Render rack status with shelf data
+                renderRackStatus(data.racks, data.rack_items || {});
+
+                // Render activity
+                renderActivity(data.activity);
+            } catch (err) {
+                console.error('Failed to load dashboard:', err);
+                document.getElementById('rack-grid').innerHTML = '<div class="no-data">Failed to load data</div>';
+                document.getElementById('activity-list').innerHTML = '<div class="no-data">Failed to load data</div>';
+            }
+        }
+
+        // Store rack data globally for panel use
+        let currentRackItems = {};
+
+        function renderRackStatus(racks, rackItems) {
+            currentRackItems = rackItems;
+            const grid = document.getElementById('rack-grid');
+
+            if (!racks || racks.length === 0) {
+                grid.innerHTML = '<div class="no-data">No rack data yet</div>';
+                return;
+            }
+
+            grid.innerHTML = racks.map(rack => {
+                let statusClass = 'empty';
+                let statusText = 'Empty';
+
+                if (rack.count > 10) {
+                    statusClass = 'full';
+                    statusText = 'Full';
+                } else if (rack.count > 0) {
+                    statusClass = 'partial';
+                    statusText = 'Active';
+                }
+
+                return `
+                    <div class="rack-item ${statusClass}" onclick="selectRack('${rack.name}')" data-rack="${rack.name}">
+                        <div class="rack-name">${rack.name}</div>
+                        <div class="rack-count">${rack.count} in stock</div>
+                        <div class="rack-status">${statusText}</div>
+                    </div>
+                `;
+            }).join('');
+
+            // Auto-select first rack with items
+            const firstRackWithItems = racks.find(r => r.count > 0);
+            if (firstRackWithItems) {
+                selectRack(firstRackWithItems.name);
+            }
+        }
+
+        function selectRack(rackName) {
+            // Highlight selected rack
+            document.querySelectorAll('.rack-item').forEach(el => el.classList.remove('selected'));
+            const selected = document.querySelector(`.rack-item[data-rack="${rackName}"]`);
+            if (selected) selected.classList.add('selected');
+
+            // Show shelf details in panel
+            const detailsPanel = document.getElementById('shelf-details');
+            const shelvesData = currentRackItems[rackName] || {};
+            const shelfNames = Object.keys(shelvesData).sort();
+
+            if (shelfNames.length === 0) {
+                detailsPanel.innerHTML = `
+                    <div class="selected-rack-title">📦 ${rackName}</div>
+                    <div class="no-data">No shelves with items</div>
+                `;
+                return;
+            }
+
+            const shelfHtml = shelfNames.map(shelfName => {
+                const items = shelvesData[shelfName] || [];
+                const count = items.length;
+
+                const itemsHtml = items.length > 0
+                    ? items.map(item => {
+                        const currentMove = item.movement || 'IN';
+                        const nextMove = currentMove === 'IN' ? 'OUT' : 'IN';
+                        return `
+                        <div class="item-detail">
+                            <div class="item-info">
+                                <div class="item-batch">${item.batch || 'No Batch'}</div>
+                                <div class="item-dates">
+                                    <span>📅 MFG: ${item.mfg || 'N/A'}</span>
+                                    <span>⏰ EXP: ${item.expiry || 'N/A'}</span>
+                                    ${item.flavour ? `<span>🍬 ${item.flavour}</span>` : ''}
+                                </div>
+                            </div>
+                            <span class="item-movement ${currentMove.toLowerCase()}">${currentMove}</span>
+                            <button class="toggle-btn ${nextMove.toLowerCase()}" onclick="toggleMovement(${item.id}, '${nextMove}')" title="Mark as ${nextMove}">
+                                ${nextMove === 'OUT' ? '⬆️ Mark OUT' : '⬇️ Mark IN'}
+                            </button>
+                        </div>
+                    `}).join('')
+                    : '<div class="empty-shelf">No items on this shelf</div>';
+
+                return `
+                    <div class="shelf-section">
+                        <div class="shelf-header">
+                            <span class="shelf-name">📦 ${shelfName}</span>
+                            <span class="shelf-count ${count === 0 ? 'empty' : ''}">${count} items</span>
+                            <button class="add-item-btn" onclick="openAddItemModal('${rackName}', '${shelfName}')" title="Add Item">➕ Add</button>
+                        </div>
+                        <div class="shelf-items">
+                            ${itemsHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            detailsPanel.innerHTML = `
+                <div class="selected-rack-title">🗄️ ${rackName}</div>
+                ${shelfHtml}
+            `;
+        }
+
+        function renderActivity(activity) {
+            const list = document.getElementById('activity-list');
+
+            if (!activity || activity.length === 0) {
+                list.innerHTML = '<div class="no-data">No recent activity</div>';
+                return;
+            }
+
+            list.innerHTML = activity.map(item => `
+                <div class="activity-item">
+                    <div class="activity-icon ${(item.movement || 'in').toLowerCase()}">
+                        ${item.movement === 'IN' ? '⬇️' : '⬆️'}
+                    </div>
+                    <div class="activity-details">
+                        <div class="activity-text">
+                            <strong>${item.batch || 'No Batch'}</strong> 
+                            ${item.movement === 'IN' ? 'added' : 'removed'}
+                            ${item.rack ? ` → ${item.rack}` : ' (Unassigned)'}
+                        </div>
+                        <div class="activity-time">${item.timestamp || 'N/A'}</div>
+                    </div>
+                    <div class="activity-actions">
+                        <button class="action-btn" onclick='openEditModal(${JSON.stringify(item)})' title="Edit">✏️</button>
+                        <button class="action-btn" onclick="deleteScan(${item.id})" title="Delete">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Toggle movement IN <-> OUT
+        async function toggleMovement(id, newMovement) {
+            if (!confirm(`Mark this item as ${newMovement}?`)) return;
+
+            try {
+                const response = await fetch('/api/admin/scan/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, movement: newMovement })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    loadDashboard(); // Refresh
+                } else {
+                    alert('Failed to update: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Add Item Modal
+        function openAddItemModal(rack, shelf) {
+            document.getElementById('edit-id').value = '';
+            document.getElementById('edit-batch').value = '';
+            document.getElementById('edit-rack').value = rack;
+            document.getElementById('edit-shelf').value = shelf;
+            document.getElementById('edit-movement').value = 'IN';
+            document.querySelector('#edit-modal h3').textContent = '➕ Add New Item';
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        // Edit Modal Functions
+        function openEditModal(item) {
+            document.getElementById('edit-id').value = item.id;
+            document.getElementById('edit-batch').value = item.batch || '';
+            document.getElementById('edit-rack').value = item.rack || '';
+            document.getElementById('edit-shelf').value = item.shelf || '';
+            document.getElementById('edit-movement').value = item.movement || 'IN';
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+        }
+
+        document.getElementById('edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const id = document.getElementById('edit-id').value;
+            const data = {
+                batch_no: document.getElementById('edit-batch').value,
+                rack_no: document.getElementById('edit-rack').value,
+                shelf_no: document.getElementById('edit-shelf').value,
+                movement: document.getElementById('edit-movement').value
+            };
+
+            try {
+                let response;
+                if (id) {
+                    // Update existing
+                    data.id = parseInt(id);
+                    response = await fetch('/api/admin/scan/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    // Add new item
+                    response = await fetch('/api/admin/scan/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
+
+                if (response.ok) {
+                    closeEditModal();
+                    loadDashboard();
+                } else {
+                    alert('Failed to save');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        });
+
+        async function deleteScan(id) {
+            if (!confirm('Are you sure you want to delete this scan?')) return;
+
+            try {
+                const response = await fetch('/api/admin/scan/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+
+                if (response.ok) {
+                    loadDashboard();
+                } else {
+                    alert('Failed to delete scan');
+                }
+            } catch (err) {
+                alert('Error deleting scan: ' + err.message);
+            }
+        }
+
+        // CSV Upload Handler
+        async function handleCSVUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function (e) {
+                const csv = e.target.result;
+                const lines = csv.split('\n').filter(line => line.trim());
+
+                if (lines.length < 2) {
+                    alert('CSV file is empty or has no data rows');
+                    return;
+                }
+
+                // Parse header
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+                // Parse rows
+                const scans = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map(v => v.trim());
+                    const scan = {};
+
+                    headers.forEach((header, index) => {
+                        // Map common header names
+                        if (header.includes('batch')) scan.batch_no = values[index] || '';
+                        else if (header.includes('mfg') || header.includes('manufacture')) scan.mfg_date = values[index] || '';
+                        else if (header.includes('exp')) scan.expiry_date = values[index] || '';
+                        else if (header.includes('rack')) scan.rack_no = values[index] || '';
+                        else if (header.includes('shelf')) scan.shelf_no = values[index] || '';
+                        else if (header.includes('move') || header.includes('type')) scan.movement = values[index] || 'IN';
+                        else if (header.includes('flav')) scan.flavour = values[index] || '';
+                    });
+
+                    scans.push(scan);
+                }
+
+                if (!confirm(`Import ${scans.length} items from CSV?`)) return;
+
+                try {
+                    const response = await fetch('/api/admin/csv/import', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ scans })
+                    });
+
+                    const result = await response.json();
+                    if (result.success) {
+                        alert(`✅ Imported ${result.imported} items!`);
+                        loadDashboard();
+                    } else {
+                        alert('❌ Import failed: ' + (result.error || 'Unknown error'));
+                    }
+                } catch (err) {
+                    alert('❌ Error: ' + err.message);
+                }
+            };
+
+            reader.readAsText(file);
+            event.target.value = ''; // Reset file input
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+
+        // Load on page load
+        loadDashboard();
+
+        // Refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - Label Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f1f5f9;
+            --text2: #94a3b8;
+            --accent: #00d4ff;
+            --accent2: #7c3aed;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg), #1a1a2e);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .chart-card h3 {
+            margin-bottom: 16px;
+            font-size: 1rem;
+            color: var(--text);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 280px;
+        }
+
+        /* Stats Summary */
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-box {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-box .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-box .label {
+            color: var(--text2);
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .stat-box.in .value {
+            color: var(--success);
+        }
+
+        .stat-box.out .value {
+            color: var(--warning);
+        }
+
+        .stat-box.stock .value {
+            color: var(--accent);
+        }
+
+        /* Full width chart */
+        .full-width {
+            grid-column: span 2;
+        }
+
+        @media (max-width: 900px) {
+            .full-width {
+                grid-column: span 1;
+            }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text2);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Auth Check -->
+    <script>
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+            window.location.href = '/';
+        } else {
+            const user = JSON.parse(userData);
+            if (user.role !== 'admin') {
+                alert('Access denied. Admin only.');
+                window.location.href = '/app';
+            }
+        }
+    </script>
+
+    <div class="container">
+        <header class="header">
+            <div>
+                <h1>📊 Analytics Dashboard</h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="location.href='/admin'">🛠️ Dashboard</button>
+                <button class="btn btn-secondary" onclick="location.href='/app'">📷 Scanner</button>
+                <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
+            </div>
+        </header>
+
+        <!-- Stats Summary -->
+        <div class="stats-summary">
+            <div class="stat-box stock">
+                <div class="value" id="total-stock">-</div>
+                <div class="label">📦 Current Stock</div>
+            </div>
+            <div class="stat-box in">
+                <div class="value" id="total-in">-</div>
+                <div class="label">⬇️ Total IN</div>
+            </div>
+            <div class="stat-box out">
+                <div class="value" id="total-out">-</div>
+                <div class="label">⬆️ Total OUT</div>
+            </div>
+            <div class="stat-box">
+                <div class="value" id="total-racks">-</div>
+                <div class="label">🗄️ Active Racks</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <!-- Rack Distribution -->
+            <div class="chart-card">
+                <h3>📦 Stock by Rack</h3>
+                <div class="chart-container">
+                    <canvas id="rackChart"></canvas>
+                </div>
+            </div>
+
+            <!-- In vs Out Pie -->
+            <div class="chart-card">
+                <h3>⚖️ IN vs OUT</h3>
+                <div class="chart-container">
+                    <canvas id="inOutChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Daily Activity -->
+            <div class="chart-card full-width">
+                <h3>📈 Daily Activity (Last 7 Days)</h3>
+                <div class="chart-container">
+                    <canvas id="activityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rackChart, inOutChart, activityChart;
+
+        async function loadAnalytics() {
+            try {
+                const response = await fetch('/api/admin/analytics');
+                const data = await response.json();
+
+                // Update stats
+                document.getElementById('total-stock').textContent = data.stats.current;
+                document.getElementById('total-in').textContent = data.stats.in;
+                document.getElementById('total-out').textContent = data.stats.out;
+                document.getElementById('total-racks').textContent = data.stats.active_racks;
+
+                // Render charts
+                renderRackChart(data.racks);
+                renderInOutChart(data.stats.in, data.stats.out);
+                renderActivityChart(data.daily);
+            } catch (err) {
+                console.error('Failed to load analytics:', err);
+            }
+        }
+
+        function renderRackChart(racks) {
+            const ctx = document.getElementById('rackChart').getContext('2d');
+
+            if (rackChart) rackChart.destroy();
+
+            rackChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: racks.map(r => r.name),
+                    datasets: [{
+                        label: 'Items in Stock',
+                        data: racks.map(r => r.count),
+                        backgroundColor: 'rgba(0, 212, 255, 0.6)',
+                        borderColor: 'rgba(0, 212, 255, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderInOutChart(inCount, outCount) {
+            const ctx = document.getElementById('inOutChart').getContext('2d');
+
+            if (inOutChart) inOutChart.destroy();
+
+            inOutChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['IN', 'OUT'],
+                    datasets: [{
+                        data: [inCount, outCount],
+                        backgroundColor: [
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(245, 158, 11, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(16, 185, 129, 1)',
+                            'rgba(245, 158, 11, 1)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#f1f5f9' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderActivityChart(daily) {
+            const ctx = document.getElementById('activityChart').getContext('2d');
+
+            if (activityChart) activityChart.destroy();
+
+            activityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: daily.map(d => d.date),
+                    datasets: [
+                        {
+                            label: 'IN',
+                            data: daily.map(d => d.in_count),
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'OUT',
+                            data: daily.map(d => d.out_count),
+                            borderColor: 'rgba(245, 158, 11, 1)',
+                            backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { color: '#f1f5f9' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+
+        // Load on page load
+        loadAnalytics();
+    </script>
+</body>
+
+</html>

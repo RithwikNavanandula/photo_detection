@@ -36,8 +36,15 @@ body {
 
 /* ===== Header ===== */
 .header {
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 16px 0;
+    gap: 16px;
+}
+
+.header-main {
+    text-align: left;
 }
 
 .header h1 {
@@ -50,7 +57,60 @@ body {
 
 .header p {
     color: var(--text2);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+}
+
+.header-user {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.header-user span {
+    color: var(--text2);
+    font-size: 0.8rem;
+}
+
+.logout-btn {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--error);
+    color: var(--error);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.logout-btn:hover {
+    background: var(--error);
+    color: white;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.admin-btn {
+    background: rgba(0, 212, 255, 0.2);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.admin-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+}
+
+.admin-btn.hidden {
+    display: none;
 }
 
 /* ===== Controls ===== */
@@ -110,6 +170,81 @@ body {
 
 #file-input {
     display: none;
+}
+
+/* ===== Batch Upload (Admin) ===== */
+.batch-upload-section {
+    margin-top: 12px;
+    text-align: center;
+}
+
+.batch-upload-section.hidden {
+    display: none;
+}
+
+#batch-file-input {
+    display: none;
+}
+
+.batch-btn {
+    background: linear-gradient(135deg, var(--accent2), var(--accent)) !important;
+}
+
+.batch-hint {
+    display: block;
+    color: var(--text2);
+    font-size: 0.75rem;
+    margin-top: 8px;
+}
+
+/* Batch Progress */
+.batch-progress {
+    background: var(--card);
+    padding: 16px;
+    border-radius: var(--radius);
+    margin: 16px 0;
+}
+
+.batch-progress.hidden {
+    display: none;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.progress-header span {
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.cancel-batch-btn {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--error);
+    color: var(--error);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.progress-bar {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
 }
 
 /* ===== Loading ===== */
@@ -335,6 +470,13 @@ body {
 .btn.export.email {
     background: linear-gradient(135deg, #ea4335, #c5221f);
     color: white;
+}
+
+.btn.sync-db {
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color: white;
+    padding: 8px 14px;
+    font-size: 0.85rem;
 }
 
 .continuous {

@@ -41,6 +41,7 @@ const App = {
             continuous: document.getElementById('continuous'),
             downloadBtn: document.getElementById('download-btn'),
             emailBtn: document.getElementById('email-btn'),
+            syncDbBtn: document.getElementById('sync-db-btn'),
             search: document.getElementById('search'),
             historyList: document.getElementById('history-list'),
             toast: document.getElementById('toast'),
@@ -54,7 +55,13 @@ const App = {
             emailRecipient: document.getElementById('email-recipient'),
             emailSummary: document.getElementById('email-summary'),
             emailCancel: document.getElementById('email-cancel'),
-            emailSend: document.getElementById('email-send')
+            emailSend: document.getElementById('email-send'),
+            // Batch upload elements
+            batchFileInput: document.getElementById('batch-file-input'),
+            batchProgress: document.getElementById('batch-progress'),
+            batchStatus: document.getElementById('batch-status'),
+            progressFill: document.getElementById('progress-fill'),
+            cancelBatch: document.getElementById('cancel-batch')
         };
 
         // Init In/Out toggle
@@ -76,8 +83,44 @@ const App = {
         // Load saved email addresses
         this.loadSavedEmails();
 
+        // Display logged in user
+        this.displayUser();
+
+        // Bind logout
+        document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+
         console.log('App ready!');
     },
+
+    displayUser() {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+            const user = JSON.parse(userData);
+            document.getElementById('user-name').textContent = `👤 ${user.name}`;
+
+            // Show admin button and batch upload for admin users
+            if (user.role === 'admin') {
+                const adminBtn = document.getElementById('admin-btn');
+                if (adminBtn) {
+                    adminBtn.classList.remove('hidden');
+                }
+                // Show batch upload section for admins
+                const batchSection = document.getElementById('batch-upload-section');
+                if (batchSection) {
+                    batchSection.classList.remove('hidden');
+                }
+            }
+        }
+    },
+
+    logout() {
+        localStorage.removeItem('user');
+        window.location.href = '/';
+    },
+
+    // Batch processing state
+    batchQueue: [],
+    batchCancelled: false,
 
     bindEvents() {
         // File upload
@@ -89,7 +132,16 @@ const App = {
         this.el.clearBtn.addEventListener('click', () => this.clear());
         this.el.downloadBtn.addEventListener('click', () => this.downloadCSV());
         this.el.emailBtn.addEventListener('click', () => this.showEmailExportModal());
+        this.el.syncDbBtn.addEventListener('click', () => this.syncToDatabase());
         this.el.search.addEventListener('input', e => this.search(e.target.value));
+
+        // Batch upload (Admin only)
+        if (this.el.batchFileInput) {
+            this.el.batchFileInput.addEventListener('change', e => this.handleBatchFiles(e));
+        }
+        if (this.el.cancelBatch) {
+            this.el.cancelBatch.addEventListener('click', () => this.cancelBatchProcessing());
+        }
 
         // Crop modal
         this.el.cropSkip.addEventListener('click', () => this.skipCrop());
@@ -162,6 +214,84 @@ const App = {
             this.el.loading.classList.add('hidden');
             e.target.value = '';
         }
+    },
+
+    // ===== Batch Processing (Admin Only) =====
+
+    async handleBatchFiles(e) {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        this.batchQueue = files;
+        this.batchCancelled = false;
+
+        // Show progress
+        this.el.batchProgress.classList.remove('hidden');
+        this.updateBatchProgress(0, files.length);
+
+        let processed = 0;
+        let saved = 0;
+
+        for (const file of files) {
+            if (this.batchCancelled) {
+                this.toast(`⏹️ Batch cancelled. Saved ${saved}/${processed} images.`);
+                break;
+            }
+
+            try {
+                processed++;
+                this.updateBatchProgress(processed, files.length);
+
+                const dataUrl = await this.fileToDataUrl(file);
+
+                // Process with Quick Mode (skip cropping for batch)
+                const text = await OCR.process(file, status => {
+                    this.el.batchStatus.textContent = `Processing ${processed}/${files.length}: ${status}`;
+                });
+
+                // Parse
+                const parsed = Parser.parse(text);
+
+                // Create scan object
+                const scan = {
+                    timestamp: new Date().toLocaleString('en-IN'),
+                    rawText: text,
+                    ...parsed,
+                    rackNo: '',
+                    shelfNo: '',
+                    movement: this.el.movement.value || 'IN'
+                };
+
+                // Auto-save
+                await Storage.save(scan);
+                saved++;
+
+            } catch (err) {
+                console.error('Batch item error:', err);
+            }
+        }
+
+        // Hide progress and reset
+        this.el.batchProgress.classList.add('hidden');
+        e.target.value = '';
+
+        // Reload history
+        await this.loadHistory();
+
+        if (!this.batchCancelled) {
+            this.toast(`✅ Batch complete! Saved ${saved}/${files.length} images.`);
+        }
+    },
+
+    updateBatchProgress(current, total) {
+        const percent = total > 0 ? (current / total) * 100 : 0;
+        this.el.batchStatus.textContent = `Processing ${current}/${total}`;
+        this.el.progressFill.style.width = `${percent}%`;
+    },
+
+    cancelBatchProcessing() {
+        this.batchCancelled = true;
+        this.toast('⏹️ Cancelling batch...');
     },
 
     showResults(scan) {
@@ -381,6 +511,56 @@ const App = {
             localStorage.setItem('savedEmails', JSON.stringify(emails));
             this.loadSavedEmails();
             console.log('Email saved:', email);
+        }
+    },
+
+    // ===== Sync to Database =====
+
+    async syncToDatabase() {
+        const scans = await Storage.getAll();
+
+        if (scans.length === 0) {
+            this.toast('No scans to sync');
+            return;
+        }
+
+        // Get user info
+        const userData = localStorage.getItem('user');
+        const user = userData ? JSON.parse(userData) : { name: 'Unknown' };
+
+        if (!confirm(`Sync ${scans.length} scans to database?\n\nThis will update the inventory dashboard.`)) {
+            return;
+        }
+
+        this.toast('⏳ Syncing to database...');
+
+        try {
+            const response = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scans: scans,
+                    user: user.name
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.toast(`✅ Synced ${result.synced} scans to database!`);
+
+                // Optionally clear local storage after successful sync
+                if (confirm('Scans synced! Clear local history?')) {
+                    await Storage.clearAll();
+                    await this.loadHistory();
+                    this.toast('Local history cleared');
+                }
+            } else {
+                this.toast('❌ Sync failed: ' + (result.error || 'Unknown error'));
+            }
+        } catch (err) {
+            console.error('Sync error:', err);
+            this.toast('❌ Sync failed: ' + err.message);
         }
     },
 

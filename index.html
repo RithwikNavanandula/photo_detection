@@ -14,11 +14,30 @@
 </head>
 
 <body>
+    <!-- Auth Check -->
+    <script>
+        // Check if user is logged in
+        const user = localStorage.getItem('user');
+        if (!user) {
+            window.location.href = '/';
+        }
+    </script>
+
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <h1>📷 Label Scanner</h1>
-            <p>Scan product labels instantly</p>
+            <div class="header-main">
+                <h1>📷 Label Scanner</h1>
+                <p>Scan product labels instantly</p>
+            </div>
+            <div class="header-user">
+                <span id="user-name"></span>
+                <div class="header-buttons">
+                    <button id="admin-btn" class="admin-btn hidden" onclick="location.href='/admin'">🛠️
+                        Dashboard</button>
+                    <button id="logout-btn" class="logout-btn">🚪 Logout</button>
+                </div>
+            </div>
         </header>
 
         <!-- Quick Mode Toggle -->
@@ -34,6 +53,24 @@
         <div class="upload-section">
             <label for="file-input" class="upload-btn">📁 Choose Image</label>
             <input type="file" id="file-input" accept="image/*" capture="environment">
+        </div>
+
+        <!-- Batch Upload (Admin Only) -->
+        <div id="batch-upload-section" class="batch-upload-section hidden">
+            <label for="batch-file-input" class="upload-btn batch-btn">📷 Select Multiple Images</label>
+            <input type="file" id="batch-file-input" accept="image/*" multiple>
+            <small class="batch-hint">Admin: Select multiple photos to process in batch</small>
+        </div>
+
+        <!-- Batch Progress -->
+        <div id="batch-progress" class="batch-progress hidden">
+            <div class="progress-header">
+                <span id="batch-status">Processing 0/0</span>
+                <button id="cancel-batch" class="cancel-batch-btn">❌ Cancel</button>
+            </div>
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
         </div>
 
         <!-- Loading -->
@@ -127,6 +164,7 @@
             <div class="history-header">
                 <h2>📚 History</h2>
                 <div class="export-buttons">
+                    <button id="sync-db-btn" class="btn sync-db">🔄 Sync to DB</button>
                     <button id="download-btn" class="btn export">📥 Download</button>
                     <button id="email-btn" class="btn export email">📧 Email</button>
                 </div>

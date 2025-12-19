@@ -3,7 +3,7 @@
  * Enables offline functionality
  */
 
-const CACHE_NAME = 'label-scanner-v9';  // Added In/Out movement toggle
+const CACHE_NAME = 'label-scanner-v13';  // Added sync to database
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache for offline use
