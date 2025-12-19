@@ -86,7 +86,7 @@ const App = {
         this.el.search.addEventListener('input', e => this.search(e.target.value));
 
         // Crop modal
-        this.el.cropSkip.addEventListener('click', () => this.cropResolve(null));
+        this.el.cropSkip.addEventListener('click', () => this.skipCrop());
         this.el.cropConfirm.addEventListener('click', () => this.cropAndProcess());
 
         // Email modal
@@ -559,6 +559,14 @@ Please find the CSV file attached to this email.`;
             this.el.cropImage.src = dataUrl;
             this.el.cropModal.classList.remove('hidden');
         });
+    },
+
+    skipCrop() {
+        this.el.cropModal.classList.add('hidden');
+        if (this.cropResolve) {
+            this.cropResolve(null);
+            this.cropResolve = null;
+        }
     },
 
     cropAndProcess() {
