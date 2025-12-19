@@ -3,7 +3,7 @@
  * Enables offline functionality
  */
 
-const CACHE_NAME = 'label-scanner-v4';  // Bumped - clears scans after email
+const CACHE_NAME = 'label-scanner-v5';  // Added email history dropdown
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache for offline use

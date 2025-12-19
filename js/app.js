@@ -67,6 +67,9 @@ const App = {
         // Load saved rack and shelf options
         this.loadLocationOptions();
 
+        // Load saved email addresses
+        this.loadSavedEmails();
+
         console.log('App ready!');
     },
 
@@ -323,6 +326,34 @@ const App = {
         }
     },
 
+    // ===== Email History Management =====
+
+    loadSavedEmails() {
+        const saved = localStorage.getItem('savedEmails');
+        const emails = saved ? JSON.parse(saved) : [];
+        const datalist = document.getElementById('email-list');
+        if (datalist) {
+            datalist.innerHTML = emails.map(email => `<option value="${email}">`).join('');
+        }
+        console.log('Saved emails loaded:', emails.length);
+    },
+
+    saveEmail(email) {
+        if (!email || !this.isValidEmail(email)) return;
+
+        const saved = localStorage.getItem('savedEmails');
+        const emails = saved ? JSON.parse(saved) : [];
+
+        // Add if not already exists (max 10 emails)
+        if (!emails.includes(email)) {
+            emails.unshift(email); // Add to beginning
+            if (emails.length > 10) emails.pop(); // Keep max 10
+            localStorage.setItem('savedEmails', JSON.stringify(emails));
+            this.loadSavedEmails();
+            console.log('Email saved:', email);
+        }
+    },
+
     async loadHistory() {
         const scans = await Storage.getAll();
 
@@ -484,6 +515,9 @@ Please find the CSV file attached to this email.`;
 
             console.log('Email sent via Gmail');
             this.toast('✅ Email sent with CSV attachment!');
+
+            // Save email for future use
+            this.saveEmail(email);
 
             // Clear all saved scans after successful email
             await Storage.clearAll();

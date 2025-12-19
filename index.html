@@ -157,7 +157,10 @@
             <div class="email-form">
                 <div class="field email-field">
                     <label>📬 To:</label>
-                    <input type="email" id="email-recipient" placeholder="Enter email address">
+                    <input type="email" id="email-recipient" list="email-list" placeholder="Enter email address">
+                    <datalist id="email-list">
+                        <!-- Previously used emails will be populated here -->
+                    </datalist>
                 </div>
                 <div class="email-summary" id="email-summary">
                     <!-- Summary will be populated dynamically -->
