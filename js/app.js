@@ -4,6 +4,7 @@
  */
 const App = {
     currentScan: null,
+    currentUser: null,
 
     // Google Apps Script Email URL - Sends emails with CSV attachments via Gmail
     GMAIL_EMAIL_URL: 'https://script.google.com/macros/s/AKfycbz_VAYQyP7MiMayNKZ4vmcur2pWPR5aqFtaN0YDR4R_WkfamMIi7Knba6Cwsz6vsiAxmA/exec',
@@ -13,6 +14,11 @@ const App = {
 
     async init() {
         console.log('Initializing Label Scanner...');
+
+        // Check authentication
+        if (!this.checkAuth()) {
+            return;
+        }
 
         // Cache elements
         this.el = {
@@ -51,8 +57,15 @@ const App = {
             emailRecipient: document.getElementById('email-recipient'),
             emailSummary: document.getElementById('email-summary'),
             emailCancel: document.getElementById('email-cancel'),
-            emailSend: document.getElementById('email-send')
+            emailSend: document.getElementById('email-send'),
+            // User elements
+            userInfo: document.getElementById('user-info'),
+            userName: document.getElementById('user-name'),
+            logoutBtn: document.getElementById('logout-btn')
         };
+
+        // Display user info
+        this.displayUserInfo();
 
         // Init storage
         await Storage.init();
@@ -92,6 +105,9 @@ const App = {
         // Email modal
         this.el.emailCancel.addEventListener('click', () => this.hideEmailModal());
         this.el.emailSend.addEventListener('click', () => this.sendEmail());
+
+        // Logout
+        this.el.logoutBtn.addEventListener('click', () => this.logout());
 
         // Make crop box draggable
         this.initCropDrag();
@@ -707,6 +723,44 @@ Please find the CSV file attached to this email.`;
         this.el.toast.textContent = msg;
         this.el.toast.classList.remove('hidden');
         setTimeout(() => this.el.toast.classList.add('hidden'), 2500);
+    },
+
+    // ===== Authentication =====
+
+    checkAuth() {
+        const session = localStorage.getItem('labelScannerSession');
+        if (!session) {
+            window.location.href = 'login.html';
+            return false;
+        }
+
+        try {
+            this.currentUser = JSON.parse(session);
+            if (!this.currentUser || !this.currentUser.username) {
+                localStorage.removeItem('labelScannerSession');
+                window.location.href = 'login.html';
+                return false;
+            }
+            console.log('User authenticated:', this.currentUser.name);
+            return true;
+        } catch (e) {
+            localStorage.removeItem('labelScannerSession');
+            window.location.href = 'login.html';
+            return false;
+        }
+    },
+
+    displayUserInfo() {
+        if (this.currentUser && this.el.userName) {
+            this.el.userName.textContent = `👤 ${this.currentUser.name || this.currentUser.username}`;
+        }
+    },
+
+    logout() {
+        if (confirm('Are you sure you want to logout?')) {
+            localStorage.removeItem('labelScannerSession');
+            window.location.href = 'login.html';
+        }
     }
 };
 

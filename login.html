@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>Label Scanner - Login</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root {
+            --bg: #0f0f1a;
+            --card: rgba(30, 30, 50, 0.9);
+            --accent: #00d4ff;
+            --accent2: #7c3aed;
+            --text: #ffffff;
+            --text2: #a0a0b0;
+            --danger: #ef4444;
+            --radius: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 360px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-header h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .login-header p {
+            color: var(--text2);
+        }
+
+        .login-form {
+            background: var(--card);
+            padding: 32px;
+            border-radius: var(--radius);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text2);
+            font-size: 0.9rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border: none;
+            border-radius: var(--radius);
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .login-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>📷 Label Scanner</h1>
+            <p>Sign in to continue</p>
+        </div>
+
+        <div class="login-form">
+            <div id="error" class="error-message"></div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">👤 Username</label>
+                    <input type="text" id="username" placeholder="Enter username" required autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">🔒 Password</label>
+                    <input type="password" id="password" placeholder="Enter password" required
+                        autocomplete="current-password">
+                </div>
+
+                <button type="submit" id="loginBtn" class="login-btn">
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Auth configuration - UPDATE THIS URL after deploying the auth Apps Script
+        const AUTH_URL = '';  // Paste your Auth Apps Script Web App URL here
+
+        // Check if already logged in
+        document.addEventListener('DOMContentLoaded', () => {
+            const session = localStorage.getItem('labelScannerSession');
+            if (session) {
+                try {
+                    const user = JSON.parse(session);
+                    if (user && user.username) {
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                } catch (e) {
+                    localStorage.removeItem('labelScannerSession');
+                }
+            }
+        });
+
+        // Handle login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorEl = document.getElementById('error');
+
+            // Hide previous error
+            errorEl.classList.remove('show');
+
+            // Check if AUTH_URL is configured
+            if (!AUTH_URL) {
+                errorEl.textContent = '⚠️ Auth not configured. See auth-setup.txt';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            // Show loading
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="loading"></span> Signing in...';
+
+            try {
+                const response = await fetch(AUTH_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'login', username, password })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Save session
+                    localStorage.setItem('labelScannerSession', JSON.stringify({
+                        username: result.username,
+                        name: result.name,
+                        loginTime: Date.now()
+                    }));
+                    // Redirect to main app
+                    window.location.href = 'index.html';
+                } else {
+                    errorEl.textContent = result.error || '❌ Invalid credentials';
+                    errorEl.classList.add('show');
+                }
+            } catch (err) {
+                console.error('Login error:', err);
+                errorEl.textContent = '❌ Connection error. Please try again.';
+                errorEl.classList.add('show');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = 'Sign In';
+            }
+        });
+    </script>
+</body>
+
+</html>
