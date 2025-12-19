@@ -110,9 +110,12 @@ const App = {
             if (!this.el.quickMode.checked) {
                 // Show crop modal
                 const cropped = await this.showCropModal(dataUrl);
-                if (cropped) {
-                    imageToProcess = new File([cropped], 'cropped.jpg', { type: 'image/jpeg' });
+                if (cropped === null) {
+                    // User clicked Skip - cancel the entire operation
+                    e.target.value = '';
+                    return;
                 }
+                imageToProcess = new File([cropped], 'cropped.jpg', { type: 'image/jpeg' });
             }
 
             // Show loading

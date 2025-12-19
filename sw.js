@@ -3,7 +3,7 @@
  * Enables offline functionality
  */
 
-const CACHE_NAME = 'label-scanner-v7';  // Fixed skip crop button
+const CACHE_NAME = 'label-scanner-v8';  // Skip cancels entire operation
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache for offline use
