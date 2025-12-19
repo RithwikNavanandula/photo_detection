@@ -17,14 +17,8 @@
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <div class="header-main">
-                <h1>📷 Label Scanner</h1>
-                <p>Scan product labels instantly</p>
-            </div>
-            <div class="user-info" id="user-info">
-                <span id="user-name"></span>
-                <button id="logout-btn" class="logout-btn">🚪 Logout</button>
-            </div>
+            <h1>📷 Label Scanner</h1>
+            <p>Scan product labels instantly</p>
         </header>
 
         <!-- Quick Mode Toggle -->
@@ -96,6 +90,14 @@
                     <option value="Shelf D">
                     <option value="Shelf E">
                 </datalist>
+            </div>
+            <div class="field inout-field">
+                <label>📦 Movement</label>
+                <div class="inout-toggle">
+                    <button type="button" id="btn-in" class="inout-btn active" data-value="IN">⬇️ IN</button>
+                    <button type="button" id="btn-out" class="inout-btn" data-value="OUT">⬆️ OUT</button>
+                </div>
+                <input type="hidden" id="movement" value="IN">
             </div>
 
             <!-- Actions -->

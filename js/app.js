@@ -4,7 +4,6 @@
  */
 const App = {
     currentScan: null,
-    currentUser: null,
 
     // Google Apps Script Email URL - Sends emails with CSV attachments via Gmail
     GMAIL_EMAIL_URL: 'https://script.google.com/macros/s/AKfycbz_VAYQyP7MiMayNKZ4vmcur2pWPR5aqFtaN0YDR4R_WkfamMIi7Knba6Cwsz6vsiAxmA/exec',
@@ -14,11 +13,6 @@ const App = {
 
     async init() {
         console.log('Initializing Label Scanner...');
-
-        // Check authentication
-        if (!this.checkAuth()) {
-            return;
-        }
 
         // Cache elements
         this.el = {
@@ -34,6 +28,9 @@ const App = {
             flavour: document.getElementById('flavour'),
             rackNo: document.getElementById('rack-no'),
             shelfNo: document.getElementById('shelf-no'),
+            movement: document.getElementById('movement'),
+            btnIn: document.getElementById('btn-in'),
+            btnOut: document.getElementById('btn-out'),
             confBatch: document.getElementById('conf-batch'),
             confMfg: document.getElementById('conf-mfg'),
             confExpiry: document.getElementById('conf-expiry'),
@@ -57,15 +54,11 @@ const App = {
             emailRecipient: document.getElementById('email-recipient'),
             emailSummary: document.getElementById('email-summary'),
             emailCancel: document.getElementById('email-cancel'),
-            emailSend: document.getElementById('email-send'),
-            // User elements
-            userInfo: document.getElementById('user-info'),
-            userName: document.getElementById('user-name'),
-            logoutBtn: document.getElementById('logout-btn')
+            emailSend: document.getElementById('email-send')
         };
 
-        // Display user info
-        this.displayUserInfo();
+        // Init In/Out toggle
+        this.initMovementToggle();
 
         // Init storage
         await Storage.init();
@@ -105,9 +98,6 @@ const App = {
         // Email modal
         this.el.emailCancel.addEventListener('click', () => this.hideEmailModal());
         this.el.emailSend.addEventListener('click', () => this.sendEmail());
-
-        // Logout
-        this.el.logoutBtn.addEventListener('click', () => this.logout());
 
         // Make crop box draggable
         this.initCropDrag();
@@ -219,6 +209,7 @@ const App = {
         this.currentScan.flavour = this.el.flavour.value || null;
         this.currentScan.rackNo = this.el.rackNo.value || null;
         this.currentScan.shelfNo = this.el.shelfNo.value || null;
+        this.currentScan.movement = this.el.movement.value || 'IN';
 
         // Save new rack/shelf options to dropdown
         if (this.currentScan.rackNo) {
@@ -302,6 +293,26 @@ const App = {
         this.el.flavour.value = '';
         this.el.rackNo.value = '';
         this.el.shelfNo.value = '';
+        // Reset movement to IN
+        this.el.movement.value = 'IN';
+        this.el.btnIn.classList.add('active');
+        this.el.btnOut.classList.remove('active');
+    },
+
+    // ===== In/Out Movement Toggle =====
+
+    initMovementToggle() {
+        this.el.btnIn.addEventListener('click', () => {
+            this.el.movement.value = 'IN';
+            this.el.btnIn.classList.add('active');
+            this.el.btnOut.classList.remove('active');
+        });
+
+        this.el.btnOut.addEventListener('click', () => {
+            this.el.movement.value = 'OUT';
+            this.el.btnOut.classList.add('active');
+            this.el.btnIn.classList.remove('active');
+        });
     },
 
     // ===== Rack and Shelf Location Management =====
@@ -384,7 +395,7 @@ const App = {
         this.el.historyList.innerHTML = scans.map(s => `
             <div class="history-item" data-id="${s.id}">
                 <div class="info">
-                    <div class="time">${s.timestamp}</div>
+                    <div class="time">${s.timestamp} <span class="movement-badge ${(s.movement || 'IN').toLowerCase()}">${s.movement || 'IN'}</span></div>
                     <div class="batch">Batch: ${s.batchNo || 'N/A'}</div>
                     <div class="dates">Mfg: ${s.mfgDate || 'N/A'} | Exp: ${s.expiryDate || 'N/A'}</div>
                 </div>
@@ -429,8 +440,8 @@ const App = {
 
     generateCSV(scans) {
         return [
-            'Timestamp,Batch,Mfg,Expiry,Flavour,Rack No,Shelf No',
-            ...scans.map(s => `"${s.timestamp}","${s.batchNo || ''}","${s.mfgDate || ''}","${s.expiryDate || ''}","${s.flavour || ''}","${s.rackNo || ''}","${s.shelfNo || ''}"`)
+            'Timestamp,Movement,Batch,Mfg,Expiry,Flavour,Rack No,Shelf No',
+            ...scans.map(s => `"${s.timestamp}","${s.movement || 'IN'}","${s.batchNo || ''}","${s.mfgDate || ''}","${s.expiryDate || ''}","${s.flavour || ''}","${s.rackNo || ''}","${s.shelfNo || ''}"`)
         ].join('\n');
     },
 
@@ -723,44 +734,6 @@ Please find the CSV file attached to this email.`;
         this.el.toast.textContent = msg;
         this.el.toast.classList.remove('hidden');
         setTimeout(() => this.el.toast.classList.add('hidden'), 2500);
-    },
-
-    // ===== Authentication =====
-
-    checkAuth() {
-        const session = localStorage.getItem('labelScannerSession');
-        if (!session) {
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        try {
-            this.currentUser = JSON.parse(session);
-            if (!this.currentUser || !this.currentUser.username) {
-                localStorage.removeItem('labelScannerSession');
-                window.location.href = 'login.html';
-                return false;
-            }
-            console.log('User authenticated:', this.currentUser.name);
-            return true;
-        } catch (e) {
-            localStorage.removeItem('labelScannerSession');
-            window.location.href = 'login.html';
-            return false;
-        }
-    },
-
-    displayUserInfo() {
-        if (this.currentUser && this.el.userName) {
-            this.el.userName.textContent = `👤 ${this.currentUser.name || this.currentUser.username}`;
-        }
-    },
-
-    logout() {
-        if (confirm('Are you sure you want to logout?')) {
-            localStorage.removeItem('labelScannerSession');
-            window.location.href = 'login.html';
-        }
     }
 };
 

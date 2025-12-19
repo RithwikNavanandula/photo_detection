@@ -36,14 +36,8 @@ body {
 
 /* ===== Header ===== */
 .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    text-align: center;
     padding: 16px 0;
-}
-
-.header-main {
-    text-align: left;
 }
 
 .header h1 {
@@ -57,33 +51,6 @@ body {
 .header p {
     color: var(--text2);
     font-size: 0.9rem;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.user-info span {
-    color: var(--text2);
-    font-size: 0.85rem;
-}
-
-.logout-btn {
-    padding: 6px 12px;
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid var(--danger);
-    border-radius: var(--radius);
-    color: var(--danger);
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.logout-btn:hover {
-    background: var(--danger);
-    color: white;
 }
 
 /* ===== Controls ===== */
@@ -272,6 +239,47 @@ body {
     background: rgba(0, 212, 255, 0.1);
 }
 
+/* ===== In/Out Toggle ===== */
+.inout-field {
+    flex-wrap: wrap;
+}
+
+.inout-toggle {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+}
+
+.inout-btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: 2px solid var(--text2);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text2);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.inout-btn.active[data-value="IN"] {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+}
+
+.inout-btn.active[data-value="OUT"] {
+    border-color: var(--warning);
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning);
+}
+
+.inout-btn:hover:not(.active) {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
 /* ===== Actions ===== */
 .actions {
     display: flex;
@@ -447,6 +455,27 @@ body {
     font-size: 1.2rem;
     cursor: pointer;
     padding: 4px;
+}
+
+/* Movement Badge */
+.movement-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 8px;
+    text-transform: uppercase;
+}
+
+.movement-badge.in {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+}
+
+.movement-badge.out {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning);
 }
 
 /* ===== Toast ===== */

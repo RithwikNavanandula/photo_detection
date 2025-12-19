@@ -3,7 +3,7 @@
  * Enables offline functionality
  */
 
-const CACHE_NAME = 'label-scanner-v9';  // Added login system
+const CACHE_NAME = 'label-scanner-v9';  // Added In/Out movement toggle
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache for offline use
