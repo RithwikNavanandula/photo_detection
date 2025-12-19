@@ -137,10 +137,15 @@
     <div id="crop-modal" class="modal hidden">
         <div class="modal-content">
             <h3>✂️ Crop Label</h3>
-            <p>Drag box to select label area</p>
+            <p>Drag box to move, drag corners to resize</p>
             <div id="crop-container" class="crop-container">
                 <img id="crop-image" src="" alt="Crop">
-                <div id="crop-box" class="crop-box"></div>
+                <div id="crop-box" class="crop-box">
+                    <div class="resize-handle nw" data-resize="nw"></div>
+                    <div class="resize-handle ne" data-resize="ne"></div>
+                    <div class="resize-handle sw" data-resize="sw"></div>
+                    <div class="resize-handle se" data-resize="se"></div>
+                </div>
             </div>
             <div class="modal-actions">
                 <button id="crop-skip" class="btn">❌ Skip</button>

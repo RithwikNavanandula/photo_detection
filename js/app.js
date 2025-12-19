@@ -595,32 +595,83 @@ Please find the CSV file attached to this email.`;
 
     initCropDrag() {
         const box = this.el.cropBox;
-        let dragging = false;
-        let startX, startY, startL, startT;
+        const container = document.getElementById('crop-container');
+        let mode = null; // 'drag' or 'resize-nw', 'resize-ne', etc.
+        let startX, startY, startL, startT, startW, startH;
 
-        const start = e => {
-            dragging = true;
+        const start = (e) => {
+            const target = e.target;
             const t = e.touches ? e.touches[0] : e;
             startX = t.clientX;
             startY = t.clientY;
             startL = box.offsetLeft;
             startT = box.offsetTop;
+            startW = box.offsetWidth;
+            startH = box.offsetHeight;
+
+            // Check if clicking on a resize handle
+            if (target.classList.contains('resize-handle')) {
+                mode = 'resize-' + target.dataset.resize;
+            } else if (target === box) {
+                mode = 'drag';
+            } else {
+                return;
+            }
             e.preventDefault();
         };
 
-        const move = e => {
-            if (!dragging) return;
+        const move = (e) => {
+            if (!mode) return;
             const t = e.touches ? e.touches[0] : e;
             const dx = t.clientX - startX;
             const dy = t.clientY - startY;
-            const cont = document.getElementById('crop-container');
-            const maxX = cont.clientWidth - box.clientWidth;
-            const maxY = cont.clientHeight - box.clientHeight;
-            box.style.left = Math.max(0, Math.min(maxX, startL + dx)) + 'px';
-            box.style.top = Math.max(0, Math.min(maxY, startT + dy)) + 'px';
+            const contRect = container.getBoundingClientRect();
+            const minSize = 50;
+
+            if (mode === 'drag') {
+                // Move the box
+                const maxX = container.clientWidth - box.offsetWidth;
+                const maxY = container.clientHeight - box.offsetHeight;
+                box.style.left = Math.max(0, Math.min(maxX, startL + dx)) + 'px';
+                box.style.top = Math.max(0, Math.min(maxY, startT + dy)) + 'px';
+            } else if (mode.startsWith('resize-')) {
+                const corner = mode.split('-')[1];
+                let newL = startL, newT = startT, newW = startW, newH = startH;
+
+                // Calculate new dimensions based on corner
+                if (corner.includes('e')) {
+                    newW = Math.max(minSize, startW + dx);
+                }
+                if (corner.includes('w')) {
+                    const maxDx = startW - minSize;
+                    const actualDx = Math.min(dx, maxDx);
+                    newL = startL + actualDx;
+                    newW = startW - actualDx;
+                }
+                if (corner.includes('s')) {
+                    newH = Math.max(minSize, startH + dy);
+                }
+                if (corner.includes('n')) {
+                    const maxDy = startH - minSize;
+                    const actualDy = Math.min(dy, maxDy);
+                    newT = startT + actualDy;
+                    newH = startH - actualDy;
+                }
+
+                // Constrain to container
+                newL = Math.max(0, newL);
+                newT = Math.max(0, newT);
+                if (newL + newW > container.clientWidth) newW = container.clientWidth - newL;
+                if (newT + newH > container.clientHeight) newH = container.clientHeight - newT;
+
+                box.style.left = newL + 'px';
+                box.style.top = newT + 'px';
+                box.style.width = newW + 'px';
+                box.style.height = newH + 'px';
+            }
         };
 
-        const end = () => { dragging = false; };
+        const end = () => { mode = null; };
 
         box.addEventListener('mousedown', start);
         box.addEventListener('touchstart', start, { passive: false });
