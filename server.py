@@ -80,7 +80,7 @@ def login():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        'SELECT id, username, name, role FROM users WHERE username = ? AND password = ? AND active = 1',
+        'SELECT id, username, name, role, verified FROM users WHERE username = ? AND password = ? AND active = 1',
         (username, hash_password(password))
     )
     user = cursor.fetchone()
