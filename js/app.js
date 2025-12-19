@@ -484,6 +484,12 @@ Please find the CSV file attached to this email.`;
 
             console.log('Email sent via Gmail');
             this.toast('✅ Email sent with CSV attachment!');
+
+            // Clear all saved scans after successful email
+            await Storage.clearAll();
+            await this.loadHistory();
+            console.log('All scans cleared after email');
+
             this.hideEmailModal();
 
         } catch (err) {
