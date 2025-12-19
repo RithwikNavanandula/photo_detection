@@ -96,6 +96,11 @@
             color: white;
         }
 
+        .btn-users {
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            color: white;
+        }
+
         .btn:hover {
             transform: translateY(-1px);
             opacity: 0.9;
@@ -668,9 +673,9 @@
             </div>
             <div class="header-actions">
                 <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
-                <button class="btn btn-upload" onclick="document.getElementById('csv-upload').click()">📤 Upload
-                    CSV</button>
+                <button class="btn btn-upload" onclick="document.getElementById('csv-upload').click()">📤 CSV</button>
                 <button class="btn btn-analytics" onclick="location.href='/analytics'">📊 Analytics</button>
+                <button class="btn btn-users" onclick="location.href='/users'">👥 Users</button>
                 <button class="btn btn-secondary" onclick="location.href='/app'">📷 Scanner</button>
                 <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
             </div>

@@ -27,7 +27,7 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Create users table
+    # Create users table with verified column
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,7 +35,8 @@ def init_db():
             password TEXT NOT NULL,
             name TEXT NOT NULL,
             role TEXT DEFAULT 'user',
-            active INTEGER DEFAULT 1
+            active INTEGER DEFAULT 1,
+            verified INTEGER DEFAULT 0
         )
     ''')
     
@@ -77,6 +78,12 @@ def login():
     conn.close()
     
     if user:
+        # Check if user is verified (verified = 1)
+        if user['verified'] == 0:
+            return jsonify({'success': False, 'error': 'Account pending approval. Please wait for admin verification.'}), 403
+        elif user['verified'] == -1:
+            return jsonify({'success': False, 'error': 'Account has been rejected.'}), 403
+        
         return jsonify({
             'success': True,
             'user': {
@@ -136,10 +143,55 @@ def list_users():
     """Admin only: list all users"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, name, role, active FROM users')
+    cursor.execute('SELECT id, username, name, role, active, verified FROM users')
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'users': users})
+
+@app.route('/api/admin/users', methods=['GET'])
+def admin_list_users():
+    """Admin only: list all users with verified status"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, username, name, role, active, verified FROM users ORDER BY verified ASC, id DESC')
+    users = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'users': users})
+
+@app.route('/api/admin/user/verify', methods=['POST'])
+def verify_user():
+    """Admin: verify/reject a user"""
+    data = request.get_json()
+    user_id = data.get('id')
+    verified = data.get('verified', 0)  # 1 = verified, -1 = rejected, 0 = pending
+    
+    if not user_id:
+        return jsonify({'success': False, 'error': 'User ID required'}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET verified = ? WHERE id = ?', (verified, user_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
+
+@app.route('/api/admin/user/delete', methods=['POST'])
+def admin_delete_user():
+    """Admin: delete a user"""
+    data = request.get_json()
+    user_id = data.get('id')
+    
+    if not user_id:
+        return jsonify({'success': False, 'error': 'User ID required'}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
 
 @app.route('/api/admin/dashboard', methods=['GET'])
 def admin_dashboard():
@@ -566,6 +618,10 @@ def serve_app():
 @app.route('/analytics')
 def serve_analytics():
     return send_from_directory('.', 'analytics.html')
+
+@app.route('/users')
+def serve_users():
+    return send_from_directory('.', 'users.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
