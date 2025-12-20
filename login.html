@@ -253,11 +253,13 @@
                 if (data.success) {
                     // Save user to localStorage
                     localStorage.setItem('user', JSON.stringify(data.user));
-                    // Redirect based on role
+                    
+                    // Hard refresh with cache buster to clear old content
+                    const cacheBuster = '?t=' + Date.now();
                     if (data.user.role === 'admin') {
-                        window.location.href = '/admin';
+                        window.location.replace('/admin' + cacheBuster);
                     } else {
-                        window.location.href = '/app';
+                        window.location.replace('/app' + cacheBuster);
                     }
                 } else {
                     errorEl.textContent = data.error || 'Login failed';
