@@ -312,12 +312,11 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    successEl.textContent = '✅ Account created! You can now sign in.';
+                    successEl.textContent = '✅ Account created! Awaiting admin approval.';
                     successEl.classList.add('show');
                     document.getElementById('register-form').reset();
 
-                    // Auto-switch to login after 2 seconds
-                    setTimeout(() => toggleForm(), 2000);
+                    // Don't auto-switch since they need approval
                 } else {
                     errorEl.textContent = data.error || 'Registration failed';
                     errorEl.classList.add('show');

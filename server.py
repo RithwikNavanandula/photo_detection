@@ -27,7 +27,7 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Create users table with verified column
+    # Create users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,35 +35,25 @@ def init_db():
             password TEXT NOT NULL,
             name TEXT NOT NULL,
             role TEXT DEFAULT 'user',
-            active INTEGER DEFAULT 1,
-            verified INTEGER DEFAULT 0
+            active INTEGER DEFAULT 1
         )
     ''')
-    
-    # Add verified column if it doesn't exist (migration for existing databases)
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 0')
-    except:
-        pass  # Column already exists
     
     # Check if users exist
     cursor.execute('SELECT COUNT(*) FROM users')
     if cursor.fetchone()[0] == 0:
-        # Add default users (verified = 1)
+        # Add default users
         users = [
-            ('admin', hash_password('admin123'), 'Administrator', 'admin', 1),
-            ('user1', hash_password('user123'), 'User One', 'user', 1)
+            ('admin', hash_password('admin123'), 'Administrator', 'admin'),
+            ('user1', hash_password('user123'), 'User One', 'user')
         ]
         cursor.executemany(
-            'INSERT INTO users (username, password, name, role, verified) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)',
             users
         )
         print('Default users created:')
         print('  admin / admin123')
         print('  user1 / user123')
-    else:
-        # Verify existing default users (admin and user1)
-        cursor.execute('UPDATE users SET verified = 1 WHERE username IN (?, ?)', ('admin', 'user1'))
     
     conn.commit()
     conn.close()
@@ -79,19 +69,18 @@ def login():
     
     conn = get_db()
     cursor = conn.cursor()
+    
+    # First check if credentials are correct
     cursor.execute(
-        'SELECT id, username, name, role, verified FROM users WHERE username = ? AND password = ? AND active = 1',
+        'SELECT id, username, name, role, active FROM users WHERE username = ? AND password = ?',
         (username, hash_password(password))
     )
     user = cursor.fetchone()
     conn.close()
     
     if user:
-        # Check if user is verified (verified = 1)
-        if user['verified'] == 0:
-            return jsonify({'success': False, 'error': 'Account pending approval. Please wait for admin verification.'}), 403
-        elif user['verified'] == -1:
-            return jsonify({'success': False, 'error': 'Account has been rejected.'}), 403
+        if user['active'] == 0:
+            return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
         
         return jsonify({
             'success': True,
@@ -135,59 +124,58 @@ def register():
         conn.close()
         return jsonify({'success': False, 'error': 'Username already taken'}), 400
     
-    # Create user
+    # Create user as INACTIVE (pending admin approval)
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     cursor.execute('''
         INSERT INTO users (username, password, name, role, active)
-        VALUES (?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, 0)
     ''', (username, password_hash, username.title(), role))
     
     conn.commit()
     conn.close()
     
-    return jsonify({'success': True, 'message': 'Account created successfully'})
+    return jsonify({'success': True, 'message': 'Account created! Awaiting admin approval.'})
 
 @app.route('/api/users', methods=['GET'])
 def list_users():
     """Admin only: list all users"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, name, role, active, verified FROM users')
+    cursor.execute('SELECT id, username, name, role, active FROM users')
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'users': users})
 
-@app.route('/api/admin/users', methods=['GET'])
-def admin_list_users():
-    """Admin only: list all users with verified status"""
+@app.route('/api/admin/users/pending', methods=['GET'])
+def pending_users():
+    """Get pending (unverified) users"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, name, role, active, verified FROM users ORDER BY verified ASC, id DESC')
+    cursor.execute('SELECT id, username, name, role FROM users WHERE active = 0')
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'users': users})
 
-@app.route('/api/admin/user/verify', methods=['POST'])
-def verify_user():
-    """Admin: verify/reject a user"""
+@app.route('/api/admin/users/approve', methods=['POST'])
+def approve_user():
+    """Approve a user account"""
     data = request.get_json()
     user_id = data.get('id')
-    verified = data.get('verified', 0)  # 1 = verified, -1 = rejected, 0 = pending
     
     if not user_id:
         return jsonify({'success': False, 'error': 'User ID required'}), 400
     
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('UPDATE users SET verified = ? WHERE id = ?', (verified, user_id))
+    cursor.execute('UPDATE users SET active = 1 WHERE id = ?', (user_id,))
     conn.commit()
     conn.close()
     
     return jsonify({'success': True})
 
-@app.route('/api/admin/user/delete', methods=['POST'])
-def admin_delete_user():
-    """Admin: delete a user"""
+@app.route('/api/admin/users/reject', methods=['POST'])
+def reject_user():
+    """Reject and delete a user account"""
     data = request.get_json()
     user_id = data.get('id')
     
@@ -196,7 +184,7 @@ def admin_delete_user():
     
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    cursor.execute('DELETE FROM users WHERE id = ? AND active = 0', (user_id,))
     conn.commit()
     conn.close()
     
