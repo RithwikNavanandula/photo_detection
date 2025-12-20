@@ -58,6 +58,9 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Initialize database on module load (needed for WSGI/PythonAnywhere)
+init_db()
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
