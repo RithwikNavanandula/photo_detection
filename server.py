@@ -23,7 +23,7 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def init_db():
-    """Initialize database with default users"""
+    """Initialize database with default users and scans table"""
     conn = get_db()
     cursor = conn.cursor()
     
@@ -38,6 +38,29 @@ def init_db():
             active INTEGER DEFAULT 1
         )
     ''')
+    
+    # Create scans table with all columns
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            batch_no TEXT,
+            mfg_date TEXT,
+            expiry_date TEXT,
+            flavour TEXT,
+            rack_no TEXT,
+            shelf_no TEXT,
+            movement TEXT DEFAULT 'IN',
+            synced_by TEXT,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Migration: Add synced_by column if it doesn't exist (for existing databases)
+    try:
+        cursor.execute('ALTER TABLE scans ADD COLUMN synced_by TEXT')
+    except:
+        pass  # Column already exists
     
     # Check if users exist
     cursor.execute('SELECT COUNT(*) FROM users')
