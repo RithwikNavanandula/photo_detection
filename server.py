@@ -23,11 +23,21 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def init_db():
-    """Initialize database with default users and scans table"""
+    """Initialize database with branches, users, and scans tables"""
     conn = get_db()
     cursor = conn.cursor()
     
-    # Create users table
+    # Create branches table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS branches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            code TEXT UNIQUE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create users table with branch_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,11 +45,12 @@ def init_db():
             password TEXT NOT NULL,
             name TEXT NOT NULL,
             role TEXT DEFAULT 'user',
+            branch_id INTEGER REFERENCES branches(id),
             active INTEGER DEFAULT 1
         )
     ''')
     
-    # Create scans table with all columns
+    # Create scans table with branch_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,31 +63,58 @@ def init_db():
             shelf_no TEXT,
             movement TEXT DEFAULT 'IN',
             synced_by TEXT,
+            branch_id INTEGER REFERENCES branches(id),
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
-    # Migration: Add synced_by column if it doesn't exist (for existing databases)
+    # Migration: Add branch_id columns if they don't exist
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN branch_id INTEGER')
+    except:
+        pass
+    try:
+        cursor.execute('ALTER TABLE scans ADD COLUMN branch_id INTEGER')
+    except:
+        pass
     try:
         cursor.execute('ALTER TABLE scans ADD COLUMN synced_by TEXT')
     except:
-        pass  # Column already exists
+        pass
+    
+    # Create default branch if none exists
+    cursor.execute('SELECT COUNT(*) FROM branches')
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO branches (name, code) VALUES ('Main Branch', 'MAIN')")
+        print('Default branch created: Main Branch (MAIN)')
+    
+    # Get default branch ID
+    cursor.execute("SELECT id FROM branches WHERE code = 'MAIN'")
+    row = cursor.fetchone()
+    default_branch_id = row[0] if row else 1
     
     # Check if users exist
     cursor.execute('SELECT COUNT(*) FROM users')
     if cursor.fetchone()[0] == 0:
-        # Add default users
+        # Add default users with branch
         users = [
-            ('admin', hash_password('admin123'), 'Administrator', 'admin'),
-            ('user1', hash_password('user123'), 'User One', 'user')
+            ('superadmin', hash_password('super123'), 'Super Admin', 'superadmin', None),  # No branch - sees all
+            ('admin', hash_password('admin123'), 'Administrator', 'admin', default_branch_id),
+            ('user1', hash_password('user123'), 'User One', 'user', default_branch_id)
         ]
         cursor.executemany(
-            'INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)',
+            'INSERT INTO users (username, password, name, role, branch_id) VALUES (?, ?, ?, ?, ?)',
             users
         )
         print('Default users created:')
-        print('  admin / admin123')
-        print('  user1 / user123')
+        print('  superadmin / super123 (all branches)')
+        print('  admin / admin123 (Main Branch)')
+        print('  user1 / user123 (Main Branch)')
+    
+    # Upgrade existing admin to superadmin if no superadmin exists
+    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'superadmin'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("UPDATE users SET role = 'superadmin', branch_id = NULL WHERE username = 'admin'")
     
     conn.commit()
     conn.close()
@@ -96,11 +134,13 @@ def login():
     conn = get_db()
     cursor = conn.cursor()
     
-    # First check if credentials are correct
-    cursor.execute(
-        'SELECT id, username, name, role, active FROM users WHERE username = ? AND password = ?',
-        (username, hash_password(password))
-    )
+    # Query user with branch info
+    cursor.execute('''
+        SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name, b.code as branch_code
+        FROM users u
+        LEFT JOIN branches b ON u.branch_id = b.id
+        WHERE u.username = ? AND u.password = ?
+    ''', (username, hash_password(password)))
     user = cursor.fetchone()
     conn.close()
     
@@ -114,7 +154,10 @@ def login():
                 'id': user['id'],
                 'username': user['username'],
                 'name': user['name'],
-                'role': user['role']
+                'role': user['role'],
+                'branch_id': user['branch_id'],
+                'branch_name': user['branch_name'] or 'All Branches',
+                'branch_code': user['branch_code'] or 'ALL'
             }
         })
     else:
@@ -127,6 +170,7 @@ def register():
     username = data.get('username', '').strip()
     password = data.get('password', '')
     role = data.get('role', 'user')
+    branch_id = data.get('branch_id')
     
     if not username or not password:
         return jsonify({'success': False, 'error': 'Username and password required'}), 400
@@ -137,7 +181,10 @@ def register():
     if len(password) < 4:
         return jsonify({'success': False, 'error': 'Password must be at least 4 characters'}), 400
     
-    # Only allow 'user' or 'admin' roles
+    if not branch_id:
+        return jsonify({'success': False, 'error': 'Please select a branch'}), 400
+    
+    # Only allow 'user' or 'admin' roles for registration
     if role not in ['user', 'admin']:
         role = 'user'
     
@@ -150,24 +197,79 @@ def register():
         conn.close()
         return jsonify({'success': False, 'error': 'Username already taken'}), 400
     
+    # Verify branch exists
+    cursor.execute('SELECT id FROM branches WHERE id = ?', (branch_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'error': 'Invalid branch selected'}), 400
+    
     # Create user as INACTIVE (pending admin approval)
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     cursor.execute('''
-        INSERT INTO users (username, password, name, role, active)
-        VALUES (?, ?, ?, ?, 0)
-    ''', (username, password_hash, username.title(), role))
+        INSERT INTO users (username, password, name, role, branch_id, active)
+        VALUES (?, ?, ?, ?, ?, 0)
+    ''', (username, password_hash, username.title(), role, branch_id))
     
     conn.commit()
     conn.close()
     
     return jsonify({'success': True, 'message': 'Account created! Awaiting admin approval.'})
 
-@app.route('/api/users', methods=['GET'])
-def list_users():
-    """Admin only: list all users"""
+@app.route('/api/branches', methods=['GET'])
+def list_branches():
+    """List all branches for registration dropdown"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, name, role, active FROM users')
+    cursor.execute('SELECT id, name, code FROM branches ORDER BY name')
+    branches = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'branches': branches})
+
+@app.route('/api/admin/branches', methods=['GET', 'POST'])
+def manage_branches():
+    """Superadmin: Get all branches or create new branch"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        code = data.get('code', '').strip().upper()
+        
+        if not name or not code:
+            return jsonify({'success': False, 'error': 'Name and code required'}), 400
+        
+        try:
+            cursor.execute('INSERT INTO branches (name, code) VALUES (?, ?)', (name, code))
+            conn.commit()
+            branch_id = cursor.lastrowid
+            conn.close()
+            return jsonify({'success': True, 'id': branch_id})
+        except:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Branch code already exists'}), 400
+    
+    # GET - list all with stats
+    cursor.execute('''
+        SELECT b.id, b.name, b.code, 
+               (SELECT COUNT(*) FROM users WHERE branch_id = b.id) as user_count,
+               (SELECT COUNT(*) FROM scans WHERE branch_id = b.id) as scan_count
+        FROM branches b ORDER BY b.name
+    ''')
+    branches = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'branches': branches})
+
+@app.route('/api/users', methods=['GET'])
+def list_users():
+    """Admin only: list all users with branch info"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name
+        FROM users u
+        LEFT JOIN branches b ON u.branch_id = b.id
+    ''')
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'users': users})
@@ -218,9 +320,18 @@ def reject_user():
 
 @app.route('/api/admin/dashboard', methods=['GET'])
 def admin_dashboard():
-    """Get dashboard data for admin"""
+    """Get dashboard data for admin (filtered by branch)"""
+    branch_id = request.args.get('branch_id', type=int)
+    
     conn = get_db()
     cursor = conn.cursor()
+    
+    # Build WHERE clause for branch filtering
+    branch_where = ''
+    branch_params = ()
+    if branch_id:
+        branch_where = ' WHERE branch_id = ?'
+        branch_params = (branch_id,)
     
     # Create scans table if not exists (for synced data)
     cursor.execute('''
@@ -234,35 +345,37 @@ def admin_dashboard():
             rack_no TEXT,
             shelf_no TEXT,
             movement TEXT DEFAULT 'IN',
+            branch_id INTEGER,
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     conn.commit()
     
-    # Get stats
-    cursor.execute('SELECT COUNT(*) FROM scans')
+    # Get stats (filtered by branch)
+    cursor.execute(f'SELECT COUNT(*) FROM scans{branch_where}', branch_params)
     total = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM scans WHERE movement = 'IN'")
+    cursor.execute(f"SELECT COUNT(*) FROM scans{branch_where}{' AND' if branch_where else ' WHERE'} movement = 'IN'", branch_params)
     total_in = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM scans WHERE movement = 'OUT'")
+    cursor.execute(f"SELECT COUNT(*) FROM scans{branch_where}{' AND' if branch_where else ' WHERE'} movement = 'OUT'", branch_params)
     total_out = cursor.fetchone()[0]
     
     # Current stock = IN - OUT (minimum 0)
     current_stock = max(0, total_in - total_out)
     
-    # Get rack summary with net stock (IN - OUT) - include assigned racks
-    cursor.execute('''
+    # Get rack summary with net stock (filtered by branch)
+    rack_query = f'''
         SELECT 
             CASE WHEN rack_no IS NULL OR rack_no = '' THEN 'Unassigned' ELSE rack_no END as name, 
             SUM(CASE WHEN movement = 'IN' THEN 1 ELSE 0 END) as in_count,
             SUM(CASE WHEN movement = 'OUT' THEN 1 ELSE 0 END) as out_count,
             SUM(CASE WHEN movement = 'IN' THEN 1 ELSE -1 END) as count
-        FROM scans 
+        FROM scans{branch_where}
         GROUP BY CASE WHEN rack_no IS NULL OR rack_no = '' THEN 'Unassigned' ELSE rack_no END
         ORDER BY name
-    ''')
+    '''
+    cursor.execute(rack_query, branch_params)
     rack_data = {row['name']: dict(row) for row in cursor.fetchall()}
     
     # Define all racks (1-10 plus Unassigned)
@@ -279,16 +392,17 @@ def admin_dashboard():
         else:
             racks.append({'name': rack_name, 'count': 0, 'in_count': 0, 'out_count': 0})
     
-    # Get detailed items per rack (for dropdown)
-    cursor.execute('''
+    # Get detailed items per rack (filtered by branch)
+    items_query = f'''
         SELECT 
             id,
             CASE WHEN rack_no IS NULL OR rack_no = '' THEN 'Unassigned' ELSE rack_no END as rack,
             CASE WHEN shelf_no IS NULL OR shelf_no = '' THEN 'No Shelf' ELSE shelf_no END as shelf,
             batch_no, mfg_date, expiry_date, flavour, movement, timestamp
-        FROM scans 
+        FROM scans{branch_where}
         ORDER BY rack, shelf, id DESC
-    ''')
+    '''
+    cursor.execute(items_query, branch_params)
     
     # Group items by rack -> shelf
     rack_items = {}
@@ -320,13 +434,14 @@ def admin_dashboard():
             if shelf not in rack_items[rack_name]:
                 rack_items[rack_name][shelf] = []
     
-    # Get recent activity (last 15)
-    cursor.execute('''
+    # Get recent activity (last 15, filtered by branch)
+    activity_query = f'''
         SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf, movement 
-        FROM scans 
+        FROM scans{branch_where}
         ORDER BY id DESC 
         LIMIT 15
-    ''')
+    '''
+    cursor.execute(activity_query, branch_params)
     activity = [dict(row) for row in cursor.fetchall()]
     
     conn.close()
@@ -345,31 +460,41 @@ def admin_dashboard():
 
 @app.route('/api/admin/analytics')
 def get_analytics():
-    """Get analytics data for charts"""
+    """Get analytics data for charts (filtered by branch)"""
+    branch_id = request.args.get('branch_id', type=int)
+    
     conn = get_db()
     cursor = conn.cursor()
     
+    # Build WHERE clause for branch filtering
+    branch_where = ''
+    branch_params = ()
+    if branch_id:
+        branch_where = ' WHERE branch_id = ?'
+        branch_params = (branch_id,)
+    
     # Basic stats
-    cursor.execute('SELECT COUNT(*) as total FROM scans')
+    cursor.execute(f'SELECT COUNT(*) as total FROM scans{branch_where}', branch_params)
     total = cursor.fetchone()['total']
     
-    cursor.execute("SELECT COUNT(*) as count FROM scans WHERE movement = 'IN'")
+    cursor.execute(f"SELECT COUNT(*) as count FROM scans{branch_where}{' AND' if branch_where else ' WHERE'} movement = 'IN'", branch_params)
     total_in = cursor.fetchone()['count']
     
-    cursor.execute("SELECT COUNT(*) as count FROM scans WHERE movement = 'OUT'")
+    cursor.execute(f"SELECT COUNT(*) as count FROM scans{branch_where}{' AND' if branch_where else ' WHERE'} movement = 'OUT'", branch_params)
     total_out = cursor.fetchone()['count']
     
     current_stock = max(0, total_in - total_out)
     
     # Rack distribution
-    cursor.execute('''
+    rack_query = f'''
         SELECT 
             CASE WHEN rack_no IS NULL OR rack_no = '' THEN 'Unassigned' ELSE rack_no END as name,
             SUM(CASE WHEN movement = 'IN' THEN 1 ELSE -1 END) as count
-        FROM scans 
+        FROM scans{branch_where}
         GROUP BY CASE WHEN rack_no IS NULL OR rack_no = '' THEN 'Unassigned' ELSE rack_no END
         ORDER BY name
-    ''')
+    '''
+    cursor.execute(rack_query, branch_params)
     racks_raw = cursor.fetchall()
     racks = [{'name': r['name'], 'count': max(0, r['count'])} for r in racks_raw]
     
@@ -377,16 +502,16 @@ def get_analytics():
     active_racks = len([r for r in racks if r['count'] > 0])
     
     # Daily activity (last 7 days)
-    cursor.execute('''
+    daily_query = f'''
         SELECT 
             DATE(synced_at) as date,
             SUM(CASE WHEN movement = 'IN' THEN 1 ELSE 0 END) as in_count,
             SUM(CASE WHEN movement = 'OUT' THEN 1 ELSE 0 END) as out_count
-        FROM scans 
-        WHERE synced_at >= DATE('now', '-7 days')
+        FROM scans{branch_where}{' AND' if branch_where else ' WHERE'} synced_at >= DATE('now', '-7 days')
         GROUP BY DATE(synced_at)
         ORDER BY date ASC
-    ''')
+    '''
+    cursor.execute(daily_query, branch_params)
     daily_raw = cursor.fetchall()
     
     # Format daily data
@@ -416,6 +541,7 @@ def sync_user_scans():
     data = request.get_json()
     scans = data.get('scans', [])
     user = data.get('user', 'Unknown')
+    branch_id = data.get('branch_id')  # Get branch from request
     
     if not scans:
         return jsonify({'success': False, 'error': 'No scans provided'}), 400
@@ -436,16 +562,17 @@ def sync_user_scans():
             shelf_no TEXT,
             movement TEXT DEFAULT 'IN',
             synced_by TEXT,
+            branch_id INTEGER,
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
-    # Add new scans (don't clear existing)
+    # Add new scans with branch_id
     synced = 0
     for scan in scans:
         cursor.execute('''
-            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             scan.get('timestamp', ''),
             scan.get('batchNo', ''),
@@ -455,7 +582,8 @@ def sync_user_scans():
             scan.get('rackNo', ''),
             scan.get('shelfNo', ''),
             scan.get('movement', 'IN'),
-            user
+            user,
+            branch_id
         ))
         synced += 1
     

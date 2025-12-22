@@ -540,7 +540,8 @@ const App = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     scans: scans,
-                    user: user.name
+                    user: user.name,
+                    branch_id: user.branch_id
                 })
             });
 

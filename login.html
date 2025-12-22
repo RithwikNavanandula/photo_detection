@@ -207,6 +207,14 @@
                 </select>
             </div>
 
+            <div class="form-group">
+                <label for="reg-branch">🏢 Branch</label>
+                <select id="reg-branch" required
+                    style="width:100%;padding:14px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);font-size:1rem;">
+                    <option value="">Select a branch...</option>
+                </select>
+            </div>
+
             <button type="submit" class="login-btn" id="register-btn">
                 Create Account
             </button>
@@ -222,7 +230,7 @@
         const userData = localStorage.getItem('user');
         if (userData) {
             const user = JSON.parse(userData);
-            if (user.role === 'admin') {
+            if (user.role === 'superadmin' || user.role === 'admin') {
                 window.location.href = '/admin';
             } else {
                 window.location.href = '/app';
@@ -253,10 +261,10 @@
                 if (data.success) {
                     // Save user to localStorage
                     localStorage.setItem('user', JSON.stringify(data.user));
-                    
+
                     // Hard refresh with cache buster to clear old content
                     const cacheBuster = '?t=' + Date.now();
-                    if (data.user.role === 'admin') {
+                    if (data.user.role === 'superadmin' || data.user.role === 'admin') {
                         window.location.replace('/admin' + cacheBuster);
                     } else {
                         window.location.replace('/app' + cacheBuster);
@@ -282,9 +290,31 @@
             if (registerContainer.style.display === 'none') {
                 loginContainer.style.display = 'none';
                 registerContainer.style.display = 'block';
+                loadBranches();  // Load branches when showing register form
             } else {
                 loginContainer.style.display = 'block';
                 registerContainer.style.display = 'none';
+            }
+        }
+
+        // Load branches for registration dropdown
+        async function loadBranches() {
+            try {
+                const response = await fetch('/api/branches');
+                const data = await response.json();
+                const select = document.getElementById('reg-branch');
+
+                // Clear existing options except first
+                select.innerHTML = '<option value="">Select a branch...</option>';
+
+                data.branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = `${branch.name} (${branch.code})`;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Error loading branches:', err);
             }
         }
 
@@ -298,6 +328,13 @@
             const username = document.getElementById('reg-username').value.trim();
             const password = document.getElementById('reg-password').value;
             const role = document.getElementById('reg-role').value;
+            const branch_id = document.getElementById('reg-branch').value;
+
+            if (!branch_id) {
+                errorEl.textContent = 'Please select a branch';
+                errorEl.classList.add('show');
+                return;
+            }
 
             btn.disabled = true;
             btn.textContent = 'Creating...';
@@ -308,7 +345,7 @@
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password, role })
+                    body: JSON.stringify({ username, password, role, branch_id: parseInt(branch_id) })
                 });
 
                 const data = await response.json();

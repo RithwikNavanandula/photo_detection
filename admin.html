@@ -659,7 +659,7 @@
             window.location.href = '/';
         } else {
             const user = JSON.parse(userData);
-            if (user.role !== 'admin') {
+            if (user.role !== 'admin' && user.role !== 'superadmin') {
                 alert('Access denied. Admin only.');
                 window.location.href = '/app';
             }
@@ -670,8 +670,13 @@
         <header class="header">
             <div>
                 <h1>🛠️ Admin Dashboard</h1>
+                <small id="branch-label" style="color: var(--text2); font-size: 0.8rem;"></small>
             </div>
             <div class="header-actions">
+                <select id="branch-filter"
+                    style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;display:none;">
+                    <option value="">All Branches</option>
+                </select>
                 <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
                 <button class="btn btn-upload" onclick="document.getElementById('csv-upload').click()">📤 Upload
                     CSV</button>
@@ -764,10 +769,64 @@
     </div>
 
     <script>
+        // Get current user
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+        // Initialize branch label and filter
+        async function initBranch() {
+            const branchLabel = document.getElementById('branch-label');
+            const branchFilter = document.getElementById('branch-filter');
+
+            if (user.role === 'superadmin') {
+                // Superadmin: show branch filter dropdown
+                branchLabel.textContent = 'Viewing: All Branches';
+                branchFilter.style.display = 'block';
+
+                // Load branches
+                try {
+                    const response = await fetch('/api/admin/branches');
+                    const data = await response.json();
+                    data.branches.forEach(branch => {
+                        const option = document.createElement('option');
+                        option.value = branch.id;
+                        option.textContent = `${branch.name} (${branch.code})`;
+                        branchFilter.appendChild(option);
+                    });
+                } catch (err) {
+                    console.error('Failed to load branches:', err);
+                }
+
+                // Handle filter change
+                branchFilter.addEventListener('change', () => {
+                    const selectedBranch = branchFilter.options[branchFilter.selectedIndex];
+                    branchLabel.textContent = branchFilter.value
+                        ? `Viewing: ${selectedBranch.textContent}`
+                        : 'Viewing: All Branches';
+                    loadDashboard();
+                });
+            } else {
+                // Admin/User: show their branch name
+                branchLabel.textContent = `Branch: ${user.branch_name || 'Unknown'}`;
+            }
+        }
+
+        // Get branch_id for API calls
+        function getBranchId() {
+            if (user.role === 'superadmin') {
+                const filter = document.getElementById('branch-filter');
+                return filter.value || null;
+            }
+            return user.branch_id;
+        }
+
         // Load dashboard data
         async function loadDashboard() {
             try {
-                const response = await fetch('/api/admin/dashboard');
+                const branchId = getBranchId();
+                const url = branchId
+                    ? `/api/admin/dashboard?branch_id=${branchId}`
+                    : '/api/admin/dashboard';
+                const response = await fetch(url);
                 const data = await response.json();
 
                 // Update stats
@@ -1099,7 +1158,7 @@
         }
 
         // Load on page load
-        loadDashboard();
+        initBranch().then(() => loadDashboard());
 
         // Refresh every 30 seconds
         setInterval(loadDashboard, 30000);
