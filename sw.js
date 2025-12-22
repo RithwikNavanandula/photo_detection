@@ -3,7 +3,7 @@
  * Enables offline functionality
  */
 
-const CACHE_NAME = 'label-scanner-v13';  // Added sync to database
+const CACHE_NAME = 'label-scanner-v14';  // Network-first strategy
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache for offline use
@@ -59,7 +59,7 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - NETWORK FIRST, fallback to cache
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
@@ -68,29 +68,24 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // For same-origin requests, try cache first
+    // For same-origin requests, try NETWORK FIRST (fresh content)
     if (url.origin === location.origin) {
         event.respondWith(
-            caches.match(event.request)
-                .then(response => {
-                    if (response) {
-                        console.log('[SW] Serving from cache:', url.pathname);
-                        return response;
+            fetch(event.request)
+                .then(networkResponse => {
+                    // Update cache with fresh content
+                    if (networkResponse.ok) {
+                        const clone = networkResponse.clone();
+                        caches.open(CACHE_NAME)
+                            .then(cache => cache.put(event.request, clone));
                     }
-                    return fetch(event.request)
-                        .then(networkResponse => {
-                            // Cache new resources
-                            if (networkResponse.ok) {
-                                const clone = networkResponse.clone();
-                                caches.open(CACHE_NAME)
-                                    .then(cache => cache.put(event.request, clone));
-                            }
-                            return networkResponse;
-                        });
+                    return networkResponse;
                 })
                 .catch(() => {
-                    console.log('[SW] Offline, no cache for:', url.pathname);
-                    return new Response('Offline', { status: 503 });
+                    // Fallback to cache when offline
+                    console.log('[SW] Offline, serving from cache:', url.pathname);
+                    return caches.match(event.request)
+                        .then(response => response || new Response('Offline', { status: 503 }));
                 })
         );
     } else {
