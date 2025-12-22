@@ -640,6 +640,66 @@ def sync_scans():
     
     return jsonify({'success': True, 'synced': len(scans)})
 
+@app.route('/api/admin/export', methods=['GET'])
+def export_data():
+    """Export inventory data to CSV"""
+    branch_id = request.args.get('branch_id', type=int)
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT s.*, b.name as branch_name 
+        FROM scans s
+        LEFT JOIN branches b ON s.branch_id = b.id
+    '''
+    params = []
+    
+    if branch_id:
+        query += ' WHERE s.branch_id = ?'
+        params.append(branch_id)
+        
+    query += ' ORDER BY s.timestamp DESC'
+    
+    cursor.execute(query, params)
+    scans = cursor.fetchall()
+    conn.close()
+    
+    # Generate CSV
+    def generate():
+        data = io.StringIO()
+        w = csv.writer(data)
+        
+        # Header
+        w.writerow(('Timestamp', 'Branch', 'Batch No', 'Mfg Date', 'Expiry Date', 'Flavour', 'Rack', 'Shelf', 'Movement', 'Synced By'))
+        yield data.getvalue()
+        data.seek(0)
+        data.truncate(0)
+        
+        # Rows
+        for s in scans:
+            w.writerow((
+                s['timestamp'],
+                s['branch_name'] or 'Unknown',
+                s['batch_no'],
+                s['mfg_date'],
+                s['expiry_date'],
+                s['flavour'],
+                s['rack_no'],
+                s['shelf_no'],
+                s['movement'],
+                s['synced_by']
+            ))
+            yield data.getvalue()
+            data.seek(0)
+            data.truncate(0)
+
+    # Return as streaming response
+    response = Response(generate(), mimetype='text/csv')
+    filename = f"inventory_report_{datetime.now().strftime('%Y%m%d')}.csv"
+    response.headers.set('Content-Disposition', 'attachment', filename=filename)
+    return response
+
 @app.route('/api/admin/scan/update', methods=['POST'])
 def update_scan():
     """Update a scan record"""

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Branch Management - Label Scanner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f1f5f9;
+            --text2: #94a3b8;
+            --accent: #00d4ff;
+            --accent2: #7c3aed;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg), #1a1a2e);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        /* Sections */
+        .section {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            margin-bottom: 16px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text2);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text);
+        }
+
+        /* Branch List */
+        .branch-list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .branch-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .branch-info h3 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .branch-info p {
+            color: var(--text2);
+            font-size: 0.9rem;
+        }
+
+        .branch-code {
+            display: inline-block;
+            background: rgba(124, 58, 237, 0.2);
+            color: #a78bfa;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+
+        .branch-stats {
+            display: flex;
+            gap: 16px;
+        }
+
+        .stat-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        .no-data {
+            text-align: center;
+            color: var(--text2);
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Auth Check -->
+    <script>
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+            window.location.href = '/';
+        } else {
+            const user = JSON.parse(userData);
+            if (user.role !== 'superadmin') {
+                alert('Access denied. Superadmin only.');
+                window.location.href = '/admin';
+            }
+        }
+    </script>
+
+    <div class="container">
+        <header class="header">
+            <div>
+                <h1>🏢 Branch Management</h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="location.href='/admin'">🛠️ Dashboard</button>
+                <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
+            </div>
+        </header>
+
+        <!-- Create Branch -->
+        <div class="section">
+            <h2>➕ Create New Branch</h2>
+            <form id="create-branch-form" onsubmit="createBranch(event)">
+                <div class="form-group">
+                    <label>Branch Name</label>
+                    <input type="text" id="branch-name" placeholder="E.g. North Warehouse" required>
+                </div>
+                <div class="form-group">
+                    <label>Branch Code (Unique ID)</label>
+                    <input type="text" id="branch-code" placeholder="E.g. NORTH01" required
+                        style="text-transform: uppercase;">
+                </div>
+                <button type="submit" class="btn btn-primary">Create Branch</button>
+            </form>
+        </div>
+
+        <!-- Branch List -->
+        <div class="section">
+            <h2>📋 Existing Branches</h2>
+            <div class="branch-list" id="branch-list">
+                <div class="no-data">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadBranches() {
+            try {
+                const response = await fetch('/api/admin/branches');
+                const data = await response.json();
+                renderBranches(data.branches || []);
+            } catch (err) {
+                console.error('Error loading branches:', err);
+                document.getElementById('branch-list').innerHTML = '<div class="no-data">Failed to load branches</div>';
+            }
+        }
+
+        function renderBranches(branches) {
+            const container = document.getElementById('branch-list');
+
+            if (branches.length === 0) {
+                container.innerHTML = '<div class="no-data">No branches found</div>';
+                return;
+            }
+
+            container.innerHTML = branches.map(branch => `
+                <div class="branch-card">
+                    <div class="branch-info">
+                        <h3>${branch.name} <span class="branch-code">${branch.code}</span></h3>
+                        <p>ID: ${branch.id}</p>
+                    </div>
+                    <div class="branch-stats">
+                        <div class="stat-badge" title="Users">
+                            👥 ${branch.user_count} Users
+                        </div>
+                        <div class="stat-badge" title="Scans">
+                            📦 ${branch.scan_count} Scans
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function createBranch(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('branch-name').value.trim();
+            const code = document.getElementById('branch-code').value.trim().toUpperCase();
+            const btn = e.target.querySelector('button');
+
+            if (!name || !code) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                const response = await fetch('/api/admin/branches', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Branch created successfully!');
+                    document.getElementById('create-branch-form').reset();
+                    loadBranches();
+                } else {
+                    alert('❌ Error: ' + (result.error || 'Failed to create branch'));
+                }
+            } catch (err) {
+                alert('❌ Error: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create Branch';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+
+        // Load on page load
+        loadBranches();
+    </script>
+</body>
+
+</html>

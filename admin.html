@@ -678,8 +678,11 @@
                     <option value="">All Branches</option>
                 </select>
                 <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+                <button class="btn btn-primary" id="btn-branches" style="display:none;"
+                    onclick="location.href='/branches'">🏢 Branches</button>
                 <button class="btn btn-upload" onclick="document.getElementById('csv-upload').click()">📤 Upload
                     CSV</button>
+                <button class="btn btn-secondary" onclick="downloadReport()">📥 Export</button>
                 <button class="btn btn-analytics" onclick="location.href='/analytics'">📊 Analytics</button>
                 <button class="btn btn-users" onclick="location.href='/users'">👥 Users</button>
                 <button class="btn btn-secondary" onclick="location.href='/app'">📷 Scanner</button>
@@ -778,9 +781,10 @@
             const branchFilter = document.getElementById('branch-filter');
 
             if (user.role === 'superadmin') {
-                // Superadmin: show branch filter dropdown
+                // Superadmin: show branch filter dropdown and branches button
                 branchLabel.textContent = 'Viewing: All Branches';
                 branchFilter.style.display = 'block';
+                document.getElementById('btn-branches').style.display = 'inline-block';
 
                 // Load branches
                 try {
@@ -1150,6 +1154,15 @@
 
             reader.readAsText(file);
             event.target.value = ''; // Reset file input
+        }
+
+        function downloadReport() {
+            const branchId = getBranchId();
+            let url = '/api/admin/export';
+            if (branchId) {
+                url += `?branch_id=${branchId}`;
+            }
+            window.location.href = url;
         }
 
         function logout() {
