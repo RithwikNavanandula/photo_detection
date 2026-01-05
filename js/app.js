@@ -98,8 +98,9 @@ const App = {
             const user = JSON.parse(userData);
             document.getElementById('user-name').textContent = `👤 ${user.name}`;
 
-            // Show admin button and batch upload for admin users
+            // Show admin button for admin/superadmin users
             if (user.role === 'admin' || user.role === 'superadmin') {
+                const adminBtn = document.getElementById('admin-btn');
                 if (adminBtn) {
                     adminBtn.classList.remove('hidden');
                 }
