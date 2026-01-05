@@ -100,14 +100,8 @@ const App = {
 
             // Show admin button and batch upload for admin users
             if (user.role === 'admin' || user.role === 'superadmin') {
-                const adminBtn = document.getElementById('admin-btn');
                 if (adminBtn) {
                     adminBtn.classList.remove('hidden');
-                }
-                // Show batch upload section for admins
-                const batchSection = document.getElementById('batch-upload-section');
-                if (batchSection) {
-                    batchSection.classList.remove('hidden');
                 }
             }
         }
@@ -342,7 +336,23 @@ const App = {
         this.currentScan.movement = this.el.movement.value || 'IN';
 
         // Check for mandatory fields
-        if (!this.currentScan.rackNo || !this.currentScan.shelfNo) {
+        // Check for mandatory fields
+        let missing = false;
+        if (!this.currentScan.rackNo) {
+            this.el.rackNo.style.border = '2px solid #ef4444';
+            missing = true;
+        } else {
+            this.el.rackNo.style.border = '';
+        }
+
+        if (!this.currentScan.shelfNo) {
+            this.el.shelfNo.style.border = '2px solid #ef4444';
+            missing = true;
+        } else {
+            this.el.shelfNo.style.border = '';
+        }
+
+        if (missing) {
             this.toast('❌ Rack and Shelf are mandatory');
             return;
         }
