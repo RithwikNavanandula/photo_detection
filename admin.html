@@ -815,6 +815,13 @@
                     <small id="branch-label" style="color: var(--text2); font-size: 0.8rem;"></small>
                 </div>
                 <div class="header-actions">
+                    <select id="sort-filter"
+                        style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;margin-right:8px;">
+                        <option value="newest">📅 Newest First</option>
+                        <option value="oldest">📅 Oldest First</option>
+                        <option value="expiry-asc">⚠️ Expiry (Ascending)</option>
+                        <option value="expiry-desc">⚠️ Expiry (Descending)</option>
+                    </select>
                     <select id="branch-filter"
                         style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;display:none;">
                         <option value="">All Branches</option>
@@ -956,12 +963,22 @@
             }
 
             // Load dashboard data
+            // Sort Logic
+            document.getElementById('sort-filter').addEventListener('change', () => {
+                loadDashboard();
+            });
+
+            // Load dashboard data
             async function loadDashboard() {
                 try {
                     const branchId = getBranchId();
-                    const url = branchId
-                        ? `/api/admin/dashboard?branch_id=${branchId}`
-                        : '/api/admin/dashboard';
+                    const sortValue = document.getElementById('sort-filter').value;
+
+                    const params = new URLSearchParams();
+                    if (branchId) params.append('branch_id', branchId);
+                    params.append('sort', sortValue);
+
+                    const url = `/api/admin/dashboard?${params.toString()}`;
                     const response = await fetch(url);
                     const data = await response.json();
 

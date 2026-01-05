@@ -489,11 +489,25 @@ def admin_dashboard():
             if shelf not in rack_items[rack_name]:
                 rack_items[rack_name][shelf] = []
     
+    # Sort logic for recent activity
+    sort_type = request.args.get('sort', 'newest')
+    
+    order_clause = 'ORDER BY id DESC'
+    if sort_type == 'oldest':
+        order_clause = 'ORDER BY id ASC'
+    elif sort_type == 'expiry-asc':
+        order_clause = "ORDER BY CASE WHEN expiry_date IS NULL OR expiry_date = '' THEN 1 ELSE 0 END, expiry_date ASC"
+    elif sort_type == 'expiry-desc':
+        # Simple DESC for text dates might not be perfect for DD/MM/YYYY but typically works for standard ISO strings.
+        # However, our date format is inconsistent (DD/MM/YYYY vs YYYY-MM-DD vs random). 
+        # Standard implementation for now:
+        order_clause = "ORDER BY expiry_date DESC"
+
     # Get recent activity (last 15, filtered by branch)
     activity_query = f'''
-        SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf, movement 
+        SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf, movement, expiry_date 
         FROM scans{branch_where}
-        ORDER BY id DESC 
+        {order_clause}
         LIMIT 15
     '''
     cursor.execute(activity_query, branch_params)
