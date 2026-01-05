@@ -29,12 +29,123 @@
             background: linear-gradient(135deg, var(--bg) 0%, #0f0f23 100%);
             min-height: 100vh;
             color: var(--text);
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 220px;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #16213e 0%, #0f0f23 100%);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 12px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            padding: 12px 8px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            color: var(--text2);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+            width: 100%;
+        }
+
+        .sidebar-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+        }
+
+        .sidebar-btn.active {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(124, 58, 237, 0.2));
+            color: var(--accent);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .sidebar-btn.danger {
+            color: var(--error);
+        }
+
+        .sidebar-btn.danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 12px 0;
+        }
+
+        .sidebar-section {
+            font-size: 0.7rem;
+            color: var(--text2);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 14px;
+            margin-top: 8px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 220px;
+            padding: 20px;
+            max-width: calc(100% - 220px);
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 60px;
+                padding: 20px 8px;
+            }
+
+            .sidebar-logo {
+                font-size: 0.9rem;
+                text-align: center;
+            }
+
+            .sidebar-btn span {
+                display: none;
+            }
+
+            .sidebar-section {
+                display: none;
+            }
+
+            .main-content {
+                margin-left: 60px;
+                max-width: calc(100% - 60px);
+            }
         }
 
         /* Header */
@@ -670,252 +781,268 @@
         }
     </script>
 
-    <div class="container">
-        <header class="header">
-            <div>
-                <h1>🛠️ Admin Dashboard</h1>
-                <small id="branch-label" style="color: var(--text2); font-size: 0.8rem;"></small>
-            </div>
-            <div class="header-actions">
-                <select id="branch-filter"
-                    style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;display:none;">
-                    <option value="">All Branches</option>
-                </select>
-                <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
-                <button class="btn btn-primary" id="btn-branches" style="display:none;"
-                    onclick="location.href='/branches'">🏢 Branches</button>
-                <button class="btn btn-upload" onclick="document.getElementById('csv-upload').click()">📤 Upload
-                    CSV</button>
-                <button class="btn btn-secondary" onclick="downloadReport()">📥 Export</button>
-                <button class="btn btn-analytics" onclick="location.href='/analytics'">📊 Analytics</button>
-                <button class="btn btn-users" onclick="location.href='/users'">👥 Users</button>
-                <button class="btn btn-matrix" onclick="location.href='/pivot'">📊 Pivot View</button>
-                <button class="btn btn-secondary" onclick="location.href='/app'">📷 Scanner</button>
-                <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
-            </div>
-        </header>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-logo">🛠️ Admin Panel</div>
 
-        <!-- Stats -->
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-value" id="current-stock">-</div>
-                <div class="stat-label">📦 Current Stock</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="total-scans">-</div>
-                <div class="stat-label">Total Scans</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="total-in">-</div>
-                <div class="stat-label">⬇️ Items In</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="total-out">-</div>
-                <div class="stat-label">⬆️ Items Out</div>
-            </div>
-        </div>
+        <div class="sidebar-section">Navigation</div>
+        <button class="sidebar-btn active" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Pivot View</span></button>
+        <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+        <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
+        <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
+            <span>Branches</span></button>
 
-        <!-- Dashboard Grid - 3 Column Layout -->
-        <div class="dashboard-3col">
-            <!-- Column 1: Rack Status -->
-            <div class="card rack-panel">
-                <h2>🗄️ Rack Status</h2>
-                <div id="rack-grid" class="rack-grid">
-                    <div class="loading">Loading...</div>
-                </div>
-            </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Actions</div>
+        <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+        <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+        <button class="sidebar-btn" onclick="document.getElementById('csv-upload').click()">📤 <span>Upload
+                CSV</span></button>
+        <button class="sidebar-btn" onclick="downloadReport()">📥 <span>Export</span></button>
 
-            <!-- Column 2: Selected Rack Details -->
-            <div class="card detail-panel">
-                <h2>📦 Shelf Details</h2>
-                <div id="shelf-details" class="shelf-details">
-                    <div class="no-data">Click on a rack to see shelves</div>
-                </div>
-            </div>
+        <div style="flex:1;"></div>
+        <div class="sidebar-divider"></div>
+        <button class="sidebar-btn danger" onclick="logout()">🚪 <span>Logout</span></button>
+    </nav>
 
-            <!-- Column 3: Recent Activity -->
-            <div class="card activity-panel">
-                <h2>📋 Recent Activity</h2>
-                <div id="activity-list" class="activity-list">
-                    <div class="loading">Loading...</div>
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="container">
+            <header class="header">
+                <div>
+                    <h1>📊 Dashboard</h1>
+                    <small id="branch-label" style="color: var(--text2); font-size: 0.8rem;"></small>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Modal -->
-    <div id="edit-modal" class="modal hidden">
-        <div class="modal-content">
-            <h3>✏️ Edit Scan</h3>
-            <form id="edit-form">
-                <input type="hidden" id="edit-id">
-                <div class="form-group">
-                    <label>Batch No</label>
-                    <input type="text" id="edit-batch" placeholder="Batch number">
-                </div>
-                <div class="form-group">
-                    <label>Rack No</label>
-                    <input type="text" id="edit-rack" placeholder="Rack number">
-                </div>
-                <div class="form-group">
-                    <label>Shelf No</label>
-                    <input type="text" id="edit-shelf" placeholder="Shelf number">
-                </div>
-                <div class="form-group">
-                    <label>Movement</label>
-                    <select id="edit-movement">
-                        <option value="IN">⬇️ IN</option>
-                        <option value="OUT">⬆️ OUT</option>
+                <div class="header-actions">
+                    <select id="branch-filter"
+                        style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;display:none;">
+                        <option value="">All Branches</option>
                     </select>
                 </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">💾 Save</button>
+            </header>
+
+            <!-- Stats -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="current-stock">-</div>
+                    <div class="stat-label">📦 Current Stock</div>
                 </div>
-            </form>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-scans">-</div>
+                    <div class="stat-label">Total Scans</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-in">-</div>
+                    <div class="stat-label">⬇️ Items In</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-out">-</div>
+                    <div class="stat-label">⬆️ Items Out</div>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid - 3 Column Layout -->
+            <div class="dashboard-3col">
+                <!-- Column 1: Rack Status -->
+                <div class="card rack-panel">
+                    <h2>🗄️ Rack Status</h2>
+                    <div id="rack-grid" class="rack-grid">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Column 2: Selected Rack Details -->
+                <div class="card detail-panel">
+                    <h2>📦 Shelf Details</h2>
+                    <div id="shelf-details" class="shelf-details">
+                        <div class="no-data">Click on a rack to see shelves</div>
+                    </div>
+                </div>
+
+                <!-- Column 3: Recent Activity -->
+                <div class="card activity-panel">
+                    <h2>📋 Recent Activity</h2>
+                    <div id="activity-list" class="activity-list">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <script>
-        // Get current user
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        <!-- Edit Modal -->
+        <div id="edit-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>✏️ Edit Scan</h3>
+                <form id="edit-form">
+                    <input type="hidden" id="edit-id">
+                    <div class="form-group">
+                        <label>Batch No</label>
+                        <input type="text" id="edit-batch" placeholder="Batch number">
+                    </div>
+                    <div class="form-group">
+                        <label>Rack No</label>
+                        <input type="text" id="edit-rack" placeholder="Rack number">
+                    </div>
+                    <div class="form-group">
+                        <label>Shelf No</label>
+                        <input type="text" id="edit-shelf" placeholder="Shelf number">
+                    </div>
+                    <div class="form-group">
+                        <label>Movement</label>
+                        <select id="edit-movement">
+                            <option value="IN">⬇️ IN</option>
+                            <option value="OUT">⬆️ OUT</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">💾 Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
-        // Initialize branch label and filter
-        async function initBranch() {
-            const branchLabel = document.getElementById('branch-label');
-            const branchFilter = document.getElementById('branch-filter');
+        <script>
+            // Get current user
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-            if (user.role === 'superadmin') {
-                // Superadmin: show branch filter dropdown and branches button
-                branchLabel.textContent = 'Viewing: All Branches';
-                branchFilter.style.display = 'block';
-                document.getElementById('btn-branches').style.display = 'inline-block';
+            // Initialize branch label and filter
+            async function initBranch() {
+                const branchLabel = document.getElementById('branch-label');
+                const branchFilter = document.getElementById('branch-filter');
 
-                // Load branches
-                try {
-                    const response = await fetch('/api/admin/branches');
-                    const data = await response.json();
-                    data.branches.forEach(branch => {
-                        const option = document.createElement('option');
-                        option.value = branch.id;
-                        option.textContent = `${branch.name} (${branch.code})`;
-                        branchFilter.appendChild(option);
+                if (user.role === 'superadmin') {
+                    // Superadmin: show branch filter dropdown and branches button
+                    branchLabel.textContent = 'Viewing: All Branches';
+                    branchFilter.style.display = 'block';
+                    document.getElementById('btn-branches').style.display = 'inline-block';
+
+                    // Load branches
+                    try {
+                        const response = await fetch('/api/admin/branches');
+                        const data = await response.json();
+                        data.branches.forEach(branch => {
+                            const option = document.createElement('option');
+                            option.value = branch.id;
+                            option.textContent = `${branch.name} (${branch.code})`;
+                            branchFilter.appendChild(option);
+                        });
+                    } catch (err) {
+                        console.error('Failed to load branches:', err);
+                    }
+
+                    // Handle filter change
+                    branchFilter.addEventListener('change', () => {
+                        const selectedBranch = branchFilter.options[branchFilter.selectedIndex];
+                        branchLabel.textContent = branchFilter.value
+                            ? `Viewing: ${selectedBranch.textContent}`
+                            : 'Viewing: All Branches';
+                        loadDashboard();
                     });
+                } else {
+                    // Admin/User: show their branch name
+                    branchLabel.textContent = `Branch: ${user.branch_name || 'Unknown'}`;
+                }
+            }
+
+            // Get branch_id for API calls
+            function getBranchId() {
+                if (user.role === 'superadmin') {
+                    const filter = document.getElementById('branch-filter');
+                    return filter.value || null;
+                }
+                return user.branch_id;
+            }
+
+            // Load dashboard data
+            async function loadDashboard() {
+                try {
+                    const branchId = getBranchId();
+                    const url = branchId
+                        ? `/api/admin/dashboard?branch_id=${branchId}`
+                        : '/api/admin/dashboard';
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    // Update stats
+                    document.getElementById('current-stock').textContent = data.stats.current;
+                    document.getElementById('total-scans').textContent = data.stats.total;
+                    document.getElementById('total-in').textContent = data.stats.in;
+                    document.getElementById('total-out').textContent = data.stats.out;
+
+                    // Render rack status with shelf data
+                    renderRackStatus(data.racks, data.rack_items || {});
+
+                    // Render activity
+                    renderActivity(data.activity);
                 } catch (err) {
-                    console.error('Failed to load branches:', err);
+                    console.error('Failed to load dashboard:', err);
+                    document.getElementById('rack-grid').innerHTML = '<div class="no-data">Failed to load data</div>';
+                    document.getElementById('activity-list').innerHTML = '<div class="no-data">Failed to load data</div>';
+                }
+            }
+
+            // Store rack data globally for panel use
+            let currentRackItems = {};
+
+            function renderRackStatus(racks, rackItems) {
+                currentRackItems = rackItems;
+                const grid = document.getElementById('rack-grid');
+
+                if (!racks || racks.length === 0) {
+                    grid.innerHTML = '<div class="no-data">No rack data yet</div>';
+                    return;
                 }
 
-                // Handle filter change
-                branchFilter.addEventListener('change', () => {
-                    const selectedBranch = branchFilter.options[branchFilter.selectedIndex];
-                    branchLabel.textContent = branchFilter.value
-                        ? `Viewing: ${selectedBranch.textContent}`
-                        : 'Viewing: All Branches';
-                    loadDashboard();
-                });
-            } else {
-                // Admin/User: show their branch name
-                branchLabel.textContent = `Branch: ${user.branch_name || 'Unknown'}`;
-            }
-        }
+                grid.innerHTML = racks.map(rack => {
+                    let statusClass = rack.count > 0 ? 'partial' : 'empty';
+                    let statusText = rack.count > 0 ? `${rack.count} items` : 'Empty';
 
-        // Get branch_id for API calls
-        function getBranchId() {
-            if (user.role === 'superadmin') {
-                const filter = document.getElementById('branch-filter');
-                return filter.value || null;
-            }
-            return user.branch_id;
-        }
-
-        // Load dashboard data
-        async function loadDashboard() {
-            try {
-                const branchId = getBranchId();
-                const url = branchId
-                    ? `/api/admin/dashboard?branch_id=${branchId}`
-                    : '/api/admin/dashboard';
-                const response = await fetch(url);
-                const data = await response.json();
-
-                // Update stats
-                document.getElementById('current-stock').textContent = data.stats.current;
-                document.getElementById('total-scans').textContent = data.stats.total;
-                document.getElementById('total-in').textContent = data.stats.in;
-                document.getElementById('total-out').textContent = data.stats.out;
-
-                // Render rack status with shelf data
-                renderRackStatus(data.racks, data.rack_items || {});
-
-                // Render activity
-                renderActivity(data.activity);
-            } catch (err) {
-                console.error('Failed to load dashboard:', err);
-                document.getElementById('rack-grid').innerHTML = '<div class="no-data">Failed to load data</div>';
-                document.getElementById('activity-list').innerHTML = '<div class="no-data">Failed to load data</div>';
-            }
-        }
-
-        // Store rack data globally for panel use
-        let currentRackItems = {};
-
-        function renderRackStatus(racks, rackItems) {
-            currentRackItems = rackItems;
-            const grid = document.getElementById('rack-grid');
-
-            if (!racks || racks.length === 0) {
-                grid.innerHTML = '<div class="no-data">No rack data yet</div>';
-                return;
-            }
-
-            grid.innerHTML = racks.map(rack => {
-                let statusClass = rack.count > 0 ? 'partial' : 'empty';
-                let statusText = rack.count > 0 ? `${rack.count} items` : 'Empty';
-
-                return `
+                    return `
                     <div class="rack-item ${statusClass}" onclick="selectRack('${rack.name}')" data-rack="${rack.name}">
                         <div class="rack-name">${rack.name}</div>
                         <div class="rack-count">${rack.count > 0 ? rack.count + ' in stock' : 'No items'}</div>
                         <div class="rack-status">${statusText}</div>
                     </div>
                 `;
-            }).join('');
+                }).join('');
 
-            // Auto-select first rack with items
-            const firstRackWithItems = racks.find(r => r.count > 0);
-            if (firstRackWithItems) {
-                selectRack(firstRackWithItems.name);
+                // Auto-select first rack with items
+                const firstRackWithItems = racks.find(r => r.count > 0);
+                if (firstRackWithItems) {
+                    selectRack(firstRackWithItems.name);
+                }
             }
-        }
 
-        function selectRack(rackName) {
-            // Highlight selected rack
-            document.querySelectorAll('.rack-item').forEach(el => el.classList.remove('selected'));
-            const selected = document.querySelector(`.rack-item[data-rack="${rackName}"]`);
-            if (selected) selected.classList.add('selected');
+            function selectRack(rackName) {
+                // Highlight selected rack
+                document.querySelectorAll('.rack-item').forEach(el => el.classList.remove('selected'));
+                const selected = document.querySelector(`.rack-item[data-rack="${rackName}"]`);
+                if (selected) selected.classList.add('selected');
 
-            // Show shelf details in panel
-            const detailsPanel = document.getElementById('shelf-details');
-            const shelvesData = currentRackItems[rackName] || {};
-            const shelfNames = Object.keys(shelvesData).sort();
+                // Show shelf details in panel
+                const detailsPanel = document.getElementById('shelf-details');
+                const shelvesData = currentRackItems[rackName] || {};
+                const shelfNames = Object.keys(shelvesData).sort();
 
-            if (shelfNames.length === 0) {
-                detailsPanel.innerHTML = `
+                if (shelfNames.length === 0) {
+                    detailsPanel.innerHTML = `
                     <div class="selected-rack-title">📦 ${rackName}</div>
                     <div class="no-data">No shelves with items</div>
                 `;
-                return;
-            }
+                    return;
+                }
 
-            const shelfHtml = shelfNames.map(shelfName => {
-                const items = shelvesData[shelfName] || [];
-                const count = items.length;
+                const shelfHtml = shelfNames.map(shelfName => {
+                    const items = shelvesData[shelfName] || [];
+                    const count = items.length;
 
-                const itemsHtml = items.length > 0
-                    ? items.map(item => {
-                        const currentMove = item.movement || 'IN';
-                        const nextMove = currentMove === 'IN' ? 'OUT' : 'IN';
-                        return `
+                    const itemsHtml = items.length > 0
+                        ? items.map(item => {
+                            const currentMove = item.movement || 'IN';
+                            const nextMove = currentMove === 'IN' ? 'OUT' : 'IN';
+                            return `
                         <div class="item-detail">
                             <div class="item-info">
                                 <div class="item-batch">${item.batch || 'No Batch'}</div>
@@ -931,9 +1058,9 @@
                             </button>
                         </div>
                     `}).join('')
-                    : '<div class="empty-shelf">No items on this shelf</div>';
+                        : '<div class="empty-shelf">No items on this shelf</div>';
 
-                return `
+                    return `
                     <div class="shelf-section">
                         <div class="shelf-header">
                             <span class="shelf-name">📦 ${shelfName}</span>
@@ -945,23 +1072,23 @@
                         </div>
                     </div>
                 `;
-            }).join('');
+                }).join('');
 
-            detailsPanel.innerHTML = `
+                detailsPanel.innerHTML = `
                 <div class="selected-rack-title">🗄️ ${rackName}</div>
                 ${shelfHtml}
             `;
-        }
-
-        function renderActivity(activity) {
-            const list = document.getElementById('activity-list');
-
-            if (!activity || activity.length === 0) {
-                list.innerHTML = '<div class="no-data">No recent activity</div>';
-                return;
             }
 
-            list.innerHTML = activity.map(item => `
+            function renderActivity(activity) {
+                const list = document.getElementById('activity-list');
+
+                if (!activity || activity.length === 0) {
+                    list.innerHTML = '<div class="no-data">No recent activity</div>';
+                    return;
+                }
+
+                list.innerHTML = activity.map(item => `
                 <div class="activity-item">
                     <div class="activity-icon ${(item.movement || 'in').toLowerCase()}">
                         ${item.movement === 'IN' ? '⬇️' : '⬆️'}
@@ -980,206 +1107,208 @@
                     </div>
                 </div>
             `).join('');
-        }
-
-        // Toggle movement IN <-> OUT
-        async function toggleMovement(id, newMovement) {
-            if (!confirm(`Mark this item as ${newMovement}?`)) return;
-
-            try {
-                const response = await fetch('/api/admin/scan/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, movement: newMovement })
-                });
-
-                const result = await response.json();
-                if (result.success) {
-                    loadDashboard(); // Refresh
-                } else {
-                    alert('Failed to update: ' + (result.error || 'Unknown error'));
-                }
-            } catch (err) {
-                alert('Error: ' + err.message);
             }
-        }
 
-        // Add Item Modal
-        function openAddItemModal(rack, shelf) {
-            document.getElementById('edit-id').value = '';
-            document.getElementById('edit-batch').value = '';
-            document.getElementById('edit-rack').value = rack;
-            document.getElementById('edit-shelf').value = shelf;
-            document.getElementById('edit-movement').value = 'IN';
-            document.querySelector('#edit-modal h3').textContent = '➕ Add New Item';
-            document.getElementById('edit-modal').classList.remove('hidden');
-        }
-
-        // Edit Modal Functions
-        function openEditModal(item) {
-            document.getElementById('edit-id').value = item.id;
-            document.getElementById('edit-batch').value = item.batch || '';
-            document.getElementById('edit-rack').value = item.rack || '';
-            document.getElementById('edit-shelf').value = item.shelf || '';
-            document.getElementById('edit-movement').value = item.movement || 'IN';
-            document.getElementById('edit-modal').classList.remove('hidden');
-        }
-
-        function closeEditModal() {
-            document.getElementById('edit-modal').classList.add('hidden');
-        }
-
-        document.getElementById('edit-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const id = document.getElementById('edit-id').value;
-            const data = {
-                batch_no: document.getElementById('edit-batch').value,
-                rack_no: document.getElementById('edit-rack').value,
-                shelf_no: document.getElementById('edit-shelf').value,
-                movement: document.getElementById('edit-movement').value
-            };
-
-            try {
-                let response;
-                if (id) {
-                    // Update existing
-                    data.id = parseInt(id);
-                    response = await fetch('/api/admin/scan/update', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-                } else {
-                    // Add new item
-                    data.branch_id = getBranchId();
-                    data.synced_by = user.name || 'Admin';
-                    response = await fetch('/api/admin/scan/add', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-                }
-
-                if (response.ok) {
-                    closeEditModal();
-                    loadDashboard();
-                } else {
-                    alert('Failed to save');
-                }
-            } catch (err) {
-                alert('Error: ' + err.message);
-            }
-        });
-
-        async function deleteScan(id) {
-            if (!confirm('Are you sure you want to delete this scan?')) return;
-
-            try {
-                const response = await fetch('/api/admin/scan/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id })
-                });
-
-                if (response.ok) {
-                    loadDashboard();
-                } else {
-                    alert('Failed to delete scan');
-                }
-            } catch (err) {
-                alert('Error deleting scan: ' + err.message);
-            }
-        }
-
-        // CSV Upload Handler
-        async function handleCSVUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = async function (e) {
-                const csv = e.target.result;
-                const lines = csv.split('\n').filter(line => line.trim());
-
-                if (lines.length < 2) {
-                    alert('CSV file is empty or has no data rows');
-                    return;
-                }
-
-                // Parse header
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-                // Parse rows
-                const scans = [];
-                for (let i = 1; i < lines.length; i++) {
-                    const values = lines[i].split(',').map(v => v.trim());
-                    const scan = {};
-
-                    headers.forEach((header, index) => {
-                        // Map common header names
-                        if (header.includes('batch')) scan.batch_no = values[index] || '';
-                        else if (header.includes('mfg') || header.includes('manufacture')) scan.mfg_date = values[index] || '';
-                        else if (header.includes('exp')) scan.expiry_date = values[index] || '';
-                        else if (header.includes('rack')) scan.rack_no = values[index] || '';
-                        else if (header.includes('shelf')) scan.shelf_no = values[index] || '';
-                        else if (header.includes('move') || header.includes('type')) scan.movement = values[index] || 'IN';
-                        else if (header.includes('flav')) scan.flavour = values[index] || '';
-                    });
-
-                    scans.push(scan);
-                }
-
-                if (!confirm(`Import ${scans.length} items from CSV?`)) return;
+            // Toggle movement IN <-> OUT
+            async function toggleMovement(id, newMovement) {
+                if (!confirm(`Mark this item as ${newMovement}?`)) return;
 
                 try {
-                    const response = await fetch('/api/admin/csv/import', {
+                    const response = await fetch('/api/admin/scan/update', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            scans,
-                            branch_id: getBranchId(),
-                            synced_by: user.name || 'CSV Import'
-                        })
+                        body: JSON.stringify({ id, movement: newMovement })
                     });
 
                     const result = await response.json();
                     if (result.success) {
-                        alert(`✅ Imported ${result.imported} items!`);
-                        loadDashboard();
+                        loadDashboard(); // Refresh
                     } else {
-                        alert('❌ Import failed: ' + (result.error || 'Unknown error'));
+                        alert('Failed to update: ' + (result.error || 'Unknown error'));
                     }
                 } catch (err) {
-                    alert('❌ Error: ' + err.message);
+                    alert('Error: ' + err.message);
                 }
-            };
-
-            reader.readAsText(file);
-            event.target.value = ''; // Reset file input
-        }
-
-        function downloadReport() {
-            const branchId = getBranchId();
-            let url = '/api/admin/export';
-            if (branchId) {
-                url += `?branch_id=${branchId}`;
             }
-            window.location.href = url;
-        }
 
-        async function logout() {
-            try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { }
-            localStorage.removeItem('user');
-            window.location.href = '/';
-        }
+            // Add Item Modal
+            function openAddItemModal(rack, shelf) {
+                document.getElementById('edit-id').value = '';
+                document.getElementById('edit-batch').value = '';
+                document.getElementById('edit-rack').value = rack;
+                document.getElementById('edit-shelf').value = shelf;
+                document.getElementById('edit-movement').value = 'IN';
+                document.querySelector('#edit-modal h3').textContent = '➕ Add New Item';
+                document.getElementById('edit-modal').classList.remove('hidden');
+            }
 
-        // Load on page load
-        initBranch().then(() => loadDashboard());
+            // Edit Modal Functions
+            function openEditModal(item) {
+                document.getElementById('edit-id').value = item.id;
+                document.getElementById('edit-batch').value = item.batch || '';
+                document.getElementById('edit-rack').value = item.rack || '';
+                document.getElementById('edit-shelf').value = item.shelf || '';
+                document.getElementById('edit-movement').value = item.movement || 'IN';
+                document.getElementById('edit-modal').classList.remove('hidden');
+            }
 
-        // Refresh every 30 seconds
-        setInterval(loadDashboard, 30000);
-    </script>
+            function closeEditModal() {
+                document.getElementById('edit-modal').classList.add('hidden');
+            }
+
+            document.getElementById('edit-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const id = document.getElementById('edit-id').value;
+                const data = {
+                    batch_no: document.getElementById('edit-batch').value,
+                    rack_no: document.getElementById('edit-rack').value,
+                    shelf_no: document.getElementById('edit-shelf').value,
+                    movement: document.getElementById('edit-movement').value
+                };
+
+                try {
+                    let response;
+                    if (id) {
+                        // Update existing
+                        data.id = parseInt(id);
+                        response = await fetch('/api/admin/scan/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                    } else {
+                        // Add new item
+                        data.branch_id = getBranchId();
+                        data.synced_by = user.name || 'Admin';
+                        response = await fetch('/api/admin/scan/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                    }
+
+                    if (response.ok) {
+                        closeEditModal();
+                        loadDashboard();
+                    } else {
+                        alert('Failed to save');
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            });
+
+            async function deleteScan(id) {
+                if (!confirm('Are you sure you want to delete this scan?')) return;
+
+                try {
+                    const response = await fetch('/api/admin/scan/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id })
+                    });
+
+                    if (response.ok) {
+                        loadDashboard();
+                    } else {
+                        alert('Failed to delete scan');
+                    }
+                } catch (err) {
+                    alert('Error deleting scan: ' + err.message);
+                }
+            }
+
+            // CSV Upload Handler
+            async function handleCSVUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async function (e) {
+                    const csv = e.target.result;
+                    const lines = csv.split('\n').filter(line => line.trim());
+
+                    if (lines.length < 2) {
+                        alert('CSV file is empty or has no data rows');
+                        return;
+                    }
+
+                    // Parse header
+                    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+                    // Parse rows
+                    const scans = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').map(v => v.trim());
+                        const scan = {};
+
+                        headers.forEach((header, index) => {
+                            // Map common header names
+                            if (header.includes('batch')) scan.batch_no = values[index] || '';
+                            else if (header.includes('mfg') || header.includes('manufacture')) scan.mfg_date = values[index] || '';
+                            else if (header.includes('exp')) scan.expiry_date = values[index] || '';
+                            else if (header.includes('rack')) scan.rack_no = values[index] || '';
+                            else if (header.includes('shelf')) scan.shelf_no = values[index] || '';
+                            else if (header.includes('move') || header.includes('type')) scan.movement = values[index] || 'IN';
+                            else if (header.includes('flav')) scan.flavour = values[index] || '';
+                        });
+
+                        scans.push(scan);
+                    }
+
+                    if (!confirm(`Import ${scans.length} items from CSV?`)) return;
+
+                    try {
+                        const response = await fetch('/api/admin/csv/import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                scans,
+                                branch_id: getBranchId(),
+                                synced_by: user.name || 'CSV Import'
+                            })
+                        });
+
+                        const result = await response.json();
+                        if (result.success) {
+                            alert(`✅ Imported ${result.imported} items!`);
+                            loadDashboard();
+                        } else {
+                            alert('❌ Import failed: ' + (result.error || 'Unknown error'));
+                        }
+                    } catch (err) {
+                        alert('❌ Error: ' + err.message);
+                    }
+                };
+
+                reader.readAsText(file);
+                event.target.value = ''; // Reset file input
+            }
+
+            function downloadReport() {
+                const branchId = getBranchId();
+                let url = '/api/admin/export';
+                if (branchId) {
+                    url += `?branch_id=${branchId}`;
+                }
+                window.location.href = url;
+            }
+
+            async function logout() {
+                try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { }
+                localStorage.removeItem('user');
+                window.location.href = '/';
+            }
+
+            // Load on page load
+            initBranch().then(() => loadDashboard());
+
+            // Refresh every 30 seconds
+            setInterval(loadDashboard, 30000);
+        </script>
+    </div><!-- container -->
+    </div><!-- main-content -->
 </body>
 
 </html>
