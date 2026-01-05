@@ -365,10 +365,56 @@ const App = {
             this.saveLocationOption('shelfLocations', this.currentScan.shelfNo, 'shelf-list');
         }
 
-        await Storage.save(this.currentScan);
-        this.toast('💾 Saved!');
-        await this.loadHistory();
-        this.clear();
+        // Get user info for sync
+        const userData = localStorage.getItem('user');
+        const user = userData ? JSON.parse(userData) : { name: 'Unknown', branch_id: null };
+
+        // Prepare scan data for API
+        const scanData = {
+            timestamp: this.currentScan.timestamp || new Date().toLocaleString('en-IN'),
+            batchNo: this.currentScan.batchNo || '',
+            mfgDate: this.currentScan.mfgDate || '',
+            expiryDate: this.currentScan.expiryDate || '',
+            flavour: this.currentScan.flavour || '',
+            rackNo: this.currentScan.rackNo || '',
+            shelfNo: this.currentScan.shelfNo || '',
+            movement: this.currentScan.movement || 'IN'
+        };
+
+        try {
+            // Sync directly to database
+            const response = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scans: [scanData],
+                    user: user.name,
+                    branch_id: user.branch_id
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Also save locally as backup
+                await Storage.save(this.currentScan);
+                this.toast('✅ Saved to database!');
+                await this.loadHistory();
+                this.clear();
+            } else {
+                // If server fails, save locally only
+                await Storage.save(this.currentScan);
+                this.toast('⚠️ Saved locally (DB sync failed)');
+                await this.loadHistory();
+                this.clear();
+            }
+        } catch (err) {
+            // Offline - save locally
+            await Storage.save(this.currentScan);
+            this.toast('📴 Saved locally (offline)');
+            await this.loadHistory();
+            this.clear();
+        }
     },
 
     // Google Sheets Web App URL - User needs to set this up
