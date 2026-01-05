@@ -37,19 +37,16 @@ def setup_database():
     ''')
     print("Created table: branches")
     
-    # Create users table
+    # Create users table (matches server.py init_db schema)
     cursor.execute('''
         CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
+            username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             name TEXT NOT NULL,
-            email TEXT,
             role TEXT DEFAULT 'user',
-            branch_id INTEGER,
-            is_approved INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            branch_id INTEGER REFERENCES branches(id),
+            active INTEGER DEFAULT 1
         )
     ''')
     print("Created table: users")
@@ -81,18 +78,18 @@ def setup_database():
     branch_id = cursor.lastrowid
     print(f"Created default branch: Main Branch (ID: {branch_id})")
     
-    # Insert default users
+    # Insert default users (matches server.py defaults)
     users = [
-        ('superadmin', 'super123', 'Super Admin', 'superadmin@company.com', 'superadmin', None, 1),
-        ('admin', 'admin123', 'Admin User', 'admin@company.com', 'admin', branch_id, 1),
-        ('user1', 'user123', 'Test User', 'user@company.com', 'user', branch_id, 1),
+        ('superadmin', 'super123', 'Super Admin', 'superadmin', None),
+        ('admin', 'admin123', 'Administrator', 'admin', branch_id),
+        ('user1', 'user123', 'User One', 'user', branch_id),
     ]
     
-    for username, password, name, email, role, bid, approved in users:
+    for username, password, name, role, bid in users:
         cursor.execute('''
-            INSERT INTO users (username, password, name, email, role, branch_id, is_approved)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (username, hash_password(password), name, email, role, bid, approved))
+            INSERT INTO users (username, password, name, role, branch_id, active)
+            VALUES (?, ?, ?, ?, ?, 1)
+        ''', (username, hash_password(password), name, role, bid))
         print(f"Created user: {username} ({role})")
     
     conn.commit()
