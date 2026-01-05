@@ -187,7 +187,7 @@
             window.location.href = '/';
         } else {
             const user = JSON.parse(userData);
-            if (user.role !== 'admin') {
+            if (user.role !== 'admin' && user.role !== 'superadmin') {
                 alert('Access denied. Admin only.');
                 window.location.href = '/app';
             }
