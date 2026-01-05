@@ -1,10 +1,379 @@
- * Serving Flask app 'server.py'
+nohup: ignoring input
+
+🚀 Label Scanner Server running at http://localhost:5000
+   Login page: http://localhost:5000/
+   Main app:   http://localhost:5000/app
+
+ * Serving Flask app 'server'
  * Debug mode: on
 [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on all addresses (0.0.0.0)
  * Running on http://127.0.0.1:5000
- * Running on http://192.168.29.155:5000
+ * Running on http://192.168.1.27:5000
 [33mPress CTRL+C to quit[0m
  * Restarting with stat
  * Debugger is active!
- * Debugger PIN: 864-395-367
+ * Debugger PIN: 111-626-288
+127.0.0.1 - - [05/Jan/2026 20:22:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:22:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:03] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:04] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:06] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:07] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:07] "[31m[1mGET /api/admin/pivot HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:07] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:12] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:12] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:12] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:13] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[31m[1mGET /api/admin/dashboard?sort=newest HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:14] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:15] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:16] "[31m[1mGET /api/admin/branches HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:16] "[31m[1mGET /api/admin/pivot HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:16] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:20] "[36mGET /analytics HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:21] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:22] "[36mGET /app HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:22] "[36mGET /css/styles.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:22] "[36mGET /js/storage.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:22] "[36mGET /js/ocr.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:22] "[36mGET /js/app.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:22] "[36mGET /js/parser.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:23] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:24] "[36mGET / HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:23:25] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:26] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:29] "POST /api/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:29] "GET /admin?t=1767624809526 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:29] "GET /api/admin/dashboard?branch_id=1&sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:30] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:31] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:32] "GET /api/admin/pivot?branch_id=1 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:32] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:34] "GET /api/admin/dashboard?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:23:41] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:42] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:44] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:44] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:45] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:45] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:45] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:45] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:46] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:46] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:46] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:46] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:47] "[33mGET /matrix/v3 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:47] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:47] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:48] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:48] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:48] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:48] "[33mGET /matrix/v5 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:49] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:49] "[33mGET /matrix/v4 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:49] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:49] "[33mGET /matrix/v3 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:50] "[33mGET /matrix HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:50] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:50] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:50] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:23:51] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:23:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:24:02] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:02] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:02] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:02] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:02] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:03] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:03] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:03] "[33mGET /matrix/v2 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:03] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:04] "GET /api/admin/dashboard?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:24:04] "[36mGET / HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:05] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:05] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:05] "GET /api/admin/dashboard?branch_id=1&sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:24:05] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:07] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:07] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:07] "GET /api/admin/pivot?branch_id=1 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:24:08] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:08] "[31m[1mGET /api/admin/dashboard?sort=expiry-asc HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:24:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:24:35] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:35] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:35] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:35] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:36] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:36] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:36] "GET /api/admin/pivot?branch_id=1 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:24:37] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:38] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:38] "GET /api/admin/dashboard?branch_id=1&sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:24:38] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:24:39] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:24:43] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:24:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:25:08] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:25:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:25:38] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:25:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:26:09] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:26:39] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:43] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:44] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:45] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:45] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:45] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:26:45] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:45] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:45] "GET /api/admin/dashboard?branch_id=1&sort=expiry-asc HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:46] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:47] "GET /pivot HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:48] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:26:48] "GET /api/admin/pivot?branch_id=1 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:26:48] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:26:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:27:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:27:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:28:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:28:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:29:00] "[36mGET /admin HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:00] "GET /api/admin/dashboard?branch_id=1&sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:00] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:29:01] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:02] "[36mGET /users HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:02] "GET /api/admin/users/pending HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:02] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:29:02] "GET /api/users HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:03] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:13] "POST /api/logout HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:13] "[36mGET / HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:13] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [05/Jan/2026 20:29:14] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:20] "POST /api/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:21] "GET /admin?t=1767625160973 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:21] "GET /api/admin/branches HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:21] "GET /api/admin/dashboard?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:21] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:22] "[36mGET /pivot HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:23] "GET /api/admin/branches HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:23] "GET /api/admin/pivot HTTP/1.1" 200 -
+127.0.0.1 - - [05/Jan/2026 20:29:23] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:24] "[36mGET /users HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:29:25] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:29] "[36mGET /app HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:29] "[36mGET /css/styles.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:29] "[36mGET /js/storage.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:29] "[36mGET /js/ocr.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:29] "[36mGET /js/app.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:29] "[36mGET /js/parser.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:30] "[36mGET /sw.js HTTP/1.1[0m" 304 -
+127.0.0.1 - - [05/Jan/2026 20:29:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:30:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:30:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:31:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:31:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:32:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:32:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:33:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:33:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:34:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:34:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:35:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:35:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:36:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:36:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:37:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:37:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:38:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:38:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:39:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:39:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:40:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:40:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:41:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:41:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+ * Detected change in '/home/rishi/photo_identification/server.py', reloading
+
+🚀 Label Scanner Server running at http://localhost:5000
+   Login page: http://localhost:5000/
+   Main app:   http://localhost:5000/app
+
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 111-626-288
+127.0.0.1 - - [05/Jan/2026 20:42:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:42:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:43:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:43:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:44:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:44:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:45:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:45:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:46:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:46:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:47:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:47:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:48:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:48:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:49:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:49:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:50:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:50:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+ * Detected change in '/home/rishi/photo_identification/setup_db.py', reloading
+
+🚀 Label Scanner Server running at http://localhost:5000
+   Login page: http://localhost:5000/
+   Main app:   http://localhost:5000/app
+
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 111-626-288
+127.0.0.1 - - [05/Jan/2026 20:51:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:51:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:52:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:52:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:53:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:53:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:54:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:54:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:55:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:55:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:56:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:56:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:57:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:57:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:58:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:58:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:59:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 20:59:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:00:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:00:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:01:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:01:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:02:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:02:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:03:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:03:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:04:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+ * Detected change in '/home/rishi/photo_identification/server.py', reloading
+
+🚀 Label Scanner Server running at http://localhost:5000
+   Login page: http://localhost:5000/
+   Main app:   http://localhost:5000/app
+
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 111-626-288
+127.0.0.1 - - [05/Jan/2026 21:04:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:05:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:05:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:06:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:06:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:07:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:07:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:08:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:08:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:09:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:09:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:10:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:10:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:11:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:11:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:12:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:12:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:13:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:13:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:14:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:14:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:15:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:15:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:16:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:16:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:17:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:17:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:18:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:18:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:19:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:19:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:20:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:20:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:21:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:21:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:22:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+ * Detected change in '/home/rishi/photo_identification/server.py', reloading
+
+🚀 Label Scanner Server running at http://localhost:5000
+   Login page: http://localhost:5000/
+   Main app:   http://localhost:5000/app
+
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 111-626-288
+127.0.0.1 - - [05/Jan/2026 21:22:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:23:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:23:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:24:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:24:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:25:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:25:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:26:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:26:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:27:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:27:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:28:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:28:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:29:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:29:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:30:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:30:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:31:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:31:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:32:25] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+127.0.0.1 - - [05/Jan/2026 21:32:55] "[31m[1mGET /api/admin/dashboard HTTP/1.1[0m" 401 -
+
+🚀 Label Scanner Server running at http://localhost:5000
+   Login page: http://localhost:5000/
+   Main app:   http://localhost:5000/app
+
