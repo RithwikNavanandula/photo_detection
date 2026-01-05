@@ -64,8 +64,8 @@ def setup_database():
             shelf_no TEXT,
             movement TEXT DEFAULT 'IN',
             synced_by TEXT,
-            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             branch_id INTEGER,
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (branch_id) REFERENCES branches(id)
         )
     ''')
