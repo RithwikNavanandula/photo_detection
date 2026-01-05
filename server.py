@@ -638,9 +638,23 @@ def sync_user_scans():
         )
     ''')
     
-    # Add new scans with branch_id
+    # Add new scans with branch_id (avoiding duplicates)
     synced = 0
     for scan in scans:
+        # Check if scan already exists (matching key fields)
+        cursor.execute('''
+            SELECT id FROM scans 
+            WHERE batch_no = ? AND timestamp = ? AND rack_no = ? AND shelf_no = ?
+        ''', (
+            scan.get('batchNo', ''),
+            scan.get('timestamp', ''),
+            scan.get('rackNo', ''),
+            scan.get('shelfNo', '')
+        ))
+        
+        if cursor.fetchone():
+            continue # Skip duplicate
+
         cursor.execute('''
             INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
