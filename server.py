@@ -16,7 +16,7 @@ from datetime import datetime
 from flask import Response
 
 app = Flask(__name__, static_folder='.')
-app.secret_key = os.urandom(24)  # Secure secret key for sessions
+app.secret_key = 'label-scanner-secret-key-2026'  # Fixed key for session persistence
 CORS(app)
 
 # --- Authentication Decorators ---
