@@ -421,6 +421,16 @@
             </div>
 
             <div class="control-group">
+                <label>Sort By:</label>
+                <select id="sort-by" onchange="renderMatrix()">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="expiry-asc">Expiry (Ascending)</option>
+                    <option value="expiry-desc">Expiry (Descending)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
                 <label>Branch:</label>
                 <select id="branch-select" onchange="loadData()">
                     <option value="">Loading...</option>
@@ -528,6 +538,7 @@
 
             const groupBy = document.getElementById('group-by').value;
             const filterStatus = document.getElementById('filter-status').value;
+            const sortBy = document.getElementById('sort-by').value;
             const searchText = document.getElementById('search').value.toLowerCase();
 
             // 1. Filter Data
@@ -539,6 +550,49 @@
                     if (!searchStr.includes(searchText)) return false;
                 }
                 return true;
+            });
+
+            // 1.5 Sort Data (Client-Side)
+            filtered.sort((a, b) => {
+                if (sortBy === 'newest') return b.id - a.id;
+                if (sortBy === 'oldest') return a.id - b.id;
+
+                // Date Sorting Helper
+                const getExp = (item) => {
+                    if (!item.expiry_date) return '';
+                    // Handle DD/MM/YYYY or similar
+                    // Simplest for now: string compare if strict ISO not guaranteed. 
+                    // Better: parse. But given mixed data, string compare might be consistent enough or parse if possible.
+                    // Let's assume text comparison for now or crude parsing if format is DD/MM/YY
+                    return item.expiry_date;
+                };
+
+                const dateA = getExp(a);
+                const dateB = getExp(b);
+
+                if (!dateA && !dateB) return 0;
+                if (!dateA) return 1; // Empty dates last
+                if (!dateB) return -1;
+
+                // Try to parse DD/MM/YYYY -> YYYYMMDD for comparison
+                const parseDate = (d) => {
+                    const parts = d.split(/[/\-]/);
+                    if (parts.length === 3) {
+                        // Assume DD/MM/YY or DD/MM/YYYY. 
+                        // If YY year (e.g. 25), assume 2025
+                        let y = parts[2];
+                        if (y.length === 2) y = '20' + y;
+                        return `${y}${parts[1]}${parts[0]}`;
+                    }
+                    return d;
+                };
+
+                const valA = parseDate(dateA);
+                const valB = parseDate(dateB);
+
+                return sortBy === 'expiry-asc'
+                    ? valA.localeCompare(valB)
+                    : valB.localeCompare(valA);
             });
 
             // 2. Group Data
