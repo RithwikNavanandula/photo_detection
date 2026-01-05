@@ -641,15 +641,17 @@ def sync_user_scans():
     # Add new scans with branch_id (avoiding duplicates)
     synced = 0
     for scan in scans:
-        # Check if scan already exists (matching key fields)
+        # Check if scan already exists (same product at same location with same movement)
         cursor.execute('''
             SELECT id FROM scans 
-            WHERE batch_no = ? AND timestamp = ? AND rack_no = ? AND shelf_no = ?
+            WHERE batch_no = ? AND mfg_date = ? AND expiry_date = ? AND rack_no = ? AND shelf_no = ? AND movement = ?
         ''', (
             scan.get('batchNo', ''),
-            scan.get('timestamp', ''),
+            scan.get('mfgDate', ''),
+            scan.get('expiryDate', ''),
             scan.get('rackNo', ''),
-            scan.get('shelfNo', '')
+            scan.get('shelfNo', ''),
+            scan.get('movement', 'IN')
         ))
         
         if cursor.fetchone():
