@@ -50,6 +50,7 @@
         .header h1 {
             font-size: 1.5rem;
             background: linear-gradient(135deg, var(--accent), var(--accent2));
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -57,6 +58,12 @@
         .header-actions {
             display: flex;
             gap: 10px;
+        }
+
+        .btn-matrix {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: #fff;
+            border: none;
         }
 
         .btn {
@@ -207,10 +214,6 @@
             display: inline-block;
         }
 
-        .rack-item.full .rack-status {
-            background: var(--success);
-            color: white;
-        }
 
         .rack-item.partial .rack-status {
             background: var(--warning);
@@ -535,6 +538,7 @@
             font-size: 2rem;
             font-weight: 700;
             background: linear-gradient(135deg, var(--accent), var(--accent2));
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -685,6 +689,7 @@
                 <button class="btn btn-secondary" onclick="downloadReport()">📥 Export</button>
                 <button class="btn btn-analytics" onclick="location.href='/analytics'">📊 Analytics</button>
                 <button class="btn btn-users" onclick="location.href='/users'">👥 Users</button>
+                <button class="btn btn-matrix" onclick="location.href='/pivot'">📊 Pivot View</button>
                 <button class="btn btn-secondary" onclick="location.href='/app'">📷 Scanner</button>
                 <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
             </div>
@@ -864,21 +869,13 @@
             }
 
             grid.innerHTML = racks.map(rack => {
-                let statusClass = 'empty';
-                let statusText = 'Empty';
-
-                if (rack.count > 10) {
-                    statusClass = 'full';
-                    statusText = 'Full';
-                } else if (rack.count > 0) {
-                    statusClass = 'partial';
-                    statusText = 'Active';
-                }
+                let statusClass = rack.count > 0 ? 'partial' : 'empty';
+                let statusText = rack.count > 0 ? `${rack.count} items` : 'Empty';
 
                 return `
                     <div class="rack-item ${statusClass}" onclick="selectRack('${rack.name}')" data-rack="${rack.name}">
                         <div class="rack-name">${rack.name}</div>
-                        <div class="rack-count">${rack.count} in stock</div>
+                        <div class="rack-count">${rack.count > 0 ? rack.count + ' in stock' : 'No items'}</div>
                         <div class="rack-status">${statusText}</div>
                     </div>
                 `;
@@ -1055,6 +1052,8 @@
                     });
                 } else {
                     // Add new item
+                    data.branch_id = getBranchId();
+                    data.synced_by = user.name || 'Admin';
                     response = await fetch('/api/admin/scan/add', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1137,7 +1136,11 @@
                     const response = await fetch('/api/admin/csv/import', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ scans })
+                        body: JSON.stringify({
+                            scans,
+                            branch_id: getBranchId(),
+                            synced_by: user.name || 'CSV Import'
+                        })
                     });
 
                     const result = await response.json();
@@ -1165,7 +1168,8 @@
             window.location.href = url;
         }
 
-        function logout() {
+        async function logout() {
+            try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { }
             localStorage.removeItem('user');
             window.location.href = '/';
         }

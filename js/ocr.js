@@ -3,8 +3,7 @@
  * Uses ocr.space API online, Tesseract.js offline
  */
 const OCR = {
-    API_KEY: 'K85403682988957',
-    API_URL: 'https://api.ocr.space/parse/image',
+    API_URL: '/api/ocr',
     tesseractWorker: null,
     isOnline: navigator.onLine,
 
@@ -39,7 +38,7 @@ const OCR = {
     },
 
     /**
-     * Online OCR using ocr.space API
+     * Online OCR using backend proxy
      */
     async processOnline(file, onProgress) {
         onProgress && onProgress('Enhancing image...');
@@ -49,13 +48,7 @@ const OCR = {
         onProgress && onProgress('Sending to OCR...');
 
         const formData = new FormData();
-        formData.append('apikey', this.API_KEY);
         formData.append('file', enhanced, 'image.jpg');
-        formData.append('language', 'eng');
-        formData.append('OCREngine', '2');
-        formData.append('scale', 'true');
-        formData.append('isTable', 'false');
-        formData.append('detectOrientation', 'true');
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);

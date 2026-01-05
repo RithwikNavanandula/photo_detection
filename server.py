@@ -3,18 +3,51 @@ Flask Backend for Label Scanner Authentication
 Uses SQLite3 for user management
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 import sqlite3
 import hashlib
 import os
 import csv
 import io
+import requests
+from functools import wraps
 from datetime import datetime
 from flask import Response
 
 app = Flask(__name__, static_folder='.')
+app.secret_key = os.urandom(24)  # Secure secret key for sessions
 CORS(app)
+
+# --- Authentication Decorators ---
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        if session.get('role') not in ['admin', 'superadmin']:
+            return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+def superadmin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        if session.get('role') != 'superadmin':
+            return jsonify({'success': False, 'error': 'Superadmin privileges required'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 DB_PATH = 'users.db'
 
@@ -152,6 +185,13 @@ def login():
         if user['active'] == 0:
             return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
         
+        # Set session
+        session['user_id'] = user['id']
+        session['username'] = user['username']
+        session['role'] = user['role']
+        session['branch_id'] = user['branch_id']
+        session.permanent = True
+        
         return jsonify({
             'success': True,
             'user': {
@@ -166,6 +206,11 @@ def login():
         })
     else:
         return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({'success': True})
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -230,6 +275,7 @@ def list_branches():
     return jsonify({'branches': branches})
 
 @app.route('/api/admin/branches', methods=['GET', 'POST'])
+@superadmin_required
 def manage_branches():
     """Superadmin: Get all branches or create new branch"""
     conn = get_db()
@@ -265,6 +311,7 @@ def manage_branches():
     return jsonify({'branches': branches})
 
 @app.route('/api/users', methods=['GET'])
+@admin_required
 def list_users():
     """Admin only: list all users with branch info"""
     conn = get_db()
@@ -279,6 +326,7 @@ def list_users():
     return jsonify({'users': users})
 
 @app.route('/api/admin/users/pending', methods=['GET'])
+@admin_required
 def pending_users():
     """Get pending (unverified) users"""
     conn = get_db()
@@ -289,6 +337,7 @@ def pending_users():
     return jsonify({'users': users})
 
 @app.route('/api/admin/users/approve', methods=['POST'])
+@admin_required
 def approve_user():
     """Approve a user account"""
     data = request.get_json()
@@ -306,6 +355,7 @@ def approve_user():
     return jsonify({'success': True})
 
 @app.route('/api/admin/users/reject', methods=['POST'])
+@admin_required
 def reject_user():
     """Reject and delete a user account"""
     data = request.get_json()
@@ -323,6 +373,7 @@ def reject_user():
     return jsonify({'success': True})
 
 @app.route('/api/admin/dashboard', methods=['GET'])
+@admin_required
 def admin_dashboard():
     """Get dashboard data for admin (filtered by branch)"""
     branch_id = request.args.get('branch_id', type=int)
@@ -382,9 +433,9 @@ def admin_dashboard():
     cursor.execute(rack_query, branch_params)
     rack_data = {row['name']: dict(row) for row in cursor.fetchall()}
     
-    # Define all racks (1-10 plus Unassigned)
+    # Define all racks (1-10)
     all_rack_names = ['Rack 1', 'Rack 2', 'Rack 3', 'Rack 4', 'Rack 5', 
-                      'Rack 6', 'Rack 7', 'Rack 8', 'Rack 9', 'Rack 10', 'Unassigned']
+                      'Rack 6', 'Rack 7', 'Rack 8', 'Rack 9', 'Rack 10']
     
     # Build racks list with defaults for empty racks
     racks = []
@@ -463,6 +514,7 @@ def admin_dashboard():
     })
 
 @app.route('/api/admin/analytics')
+@admin_required
 def get_analytics():
     """Get analytics data for charts (filtered by branch)"""
     branch_id = request.args.get('branch_id', type=int)
@@ -540,6 +592,7 @@ def get_analytics():
     })
 
 @app.route('/api/sync', methods=['POST'])
+@login_required
 def sync_user_scans():
     """Sync user scan data to central database (adds, doesn't replace)"""
     data = request.get_json()
@@ -597,6 +650,7 @@ def sync_user_scans():
     return jsonify({'success': True, 'synced': synced})
 
 @app.route('/api/admin/sync', methods=['POST'])
+@admin_required
 def sync_scans():
     """Sync scan data from frontend IndexedDB"""
     data = request.get_json()
@@ -645,6 +699,7 @@ def sync_scans():
     return jsonify({'success': True, 'synced': len(scans)})
 
 @app.route('/api/admin/export', methods=['GET'])
+@admin_required
 def export_data():
     """Export inventory data to CSV"""
     branch_id = request.args.get('branch_id', type=int)
@@ -705,6 +760,7 @@ def export_data():
     return response
 
 @app.route('/api/admin/scan/update', methods=['POST'])
+@admin_required
 def update_scan():
     """Update a scan record"""
     data = request.get_json()
@@ -734,6 +790,7 @@ def update_scan():
     return jsonify({'success': True})
 
 @app.route('/api/admin/scan/add', methods=['POST'])
+@admin_required
 def add_scan():
     """Add a new scan record manually"""
     data = request.get_json()
@@ -745,8 +802,8 @@ def add_scan():
     timestamp = datetime.now().strftime('%d/%m/%Y, %I:%M:%S %p')
     
     cursor.execute('''
-        INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         timestamp,
         data.get('batch_no', ''),
@@ -755,7 +812,9 @@ def add_scan():
         data.get('flavour', ''),
         data.get('rack_no', ''),
         data.get('shelf_no', ''),
-        data.get('movement', 'IN')
+        data.get('movement', 'IN'),
+        data.get('synced_by', 'Admin'),
+        data.get('branch_id')
     ))
     
     conn.commit()
@@ -764,10 +823,13 @@ def add_scan():
     return jsonify({'success': True})
 
 @app.route('/api/admin/csv/import', methods=['POST'])
+@admin_required
 def import_csv():
     """Import multiple scans from CSV data"""
     data = request.get_json()
     scans = data.get('scans', [])
+    branch_id = data.get('branch_id')
+    synced_by = data.get('synced_by', 'CSV Import')
     
     if not scans:
         return jsonify({'success': False, 'error': 'No scans provided'}), 400
@@ -781,8 +843,8 @@ def import_csv():
     imported = 0
     for scan in scans:
         cursor.execute('''
-            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             timestamp,
             scan.get('batch_no', ''),
@@ -791,7 +853,9 @@ def import_csv():
             scan.get('flavour', ''),
             scan.get('rack_no', ''),
             scan.get('shelf_no', ''),
-            scan.get('movement', 'IN')
+            scan.get('movement', 'IN'),
+            synced_by,
+            branch_id
         ))
         imported += 1
     
@@ -800,7 +864,46 @@ def import_csv():
     
     return jsonify({'success': True, 'imported': imported})
 
+@app.route('/api/ocr', methods=['POST'])
+@login_required
+def proxy_ocr():
+    """Proxy OCR requests to hide API Key"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+        
+    file = request.files['file']
+    
+    # OCR.space API Key (Securely stored on server)
+    API_KEY = 'K85403682988957'
+    
+    try:
+        payload = {
+            'apikey': API_KEY,
+            'language': 'eng',
+            'OCREngine': '2',
+            'scale': 'true',
+            'isTable': 'false',
+            'detectOrientation': 'true'
+        }
+        
+        files = {
+            'file': (file.filename, file.read(), file.content_type)
+        }
+        
+        response = requests.post(
+            'https://api.ocr.space/parse/image',
+            files=files,
+            data=payload,
+            timeout=30
+        )
+        
+        return jsonify(response.json())
+    except Exception as e:
+        print(f"OCR Proxy Error: {e}")
+        return jsonify({'error': 'OCR Service Failed'}), 500
+
 @app.route('/api/admin/scan/delete', methods=['POST'])
+@admin_required
 def delete_scan():
     """Delete a scan record"""
     data = request.get_json()
@@ -834,6 +937,10 @@ def serve_app():
 def serve_analytics():
     return send_from_directory('.', 'analytics.html')
 
+@app.route('/branches')
+def serve_branches():
+    return send_from_directory('.', 'branches.html')
+
 @app.route('/users')
 def serve_users():
     return send_from_directory('.', 'users.html')
@@ -841,6 +948,39 @@ def serve_users():
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('.', path)
+
+@app.route('/pivot')
+def serve_pivot():
+    return send_from_directory('.', 'pivot.html')
+
+@app.route('/api/admin/pivot', methods=['GET'])
+@admin_required
+def get_pivot_data():
+    """Get flat scan data for pivot dashboard"""
+    branch_id = request.args.get('branch_id', type=int)
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Base query
+    query = '''
+        SELECT s.id, s.timestamp, s.batch_no, s.mfg_date, s.expiry_date, 
+               s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id
+        FROM scans s
+    '''
+    params = []
+    
+    if branch_id:
+        query += ' WHERE s.branch_id = ?'
+        params.append(branch_id)
+        
+    query += ' ORDER BY s.timestamp DESC'
+    
+    cursor.execute(query, params)
+    scans = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'scans': scans})
 
 if __name__ == '__main__':
     init_db()

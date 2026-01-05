@@ -341,6 +341,12 @@ const App = {
         this.currentScan.shelfNo = this.el.shelfNo.value || null;
         this.currentScan.movement = this.el.movement.value || 'IN';
 
+        // Check for mandatory fields
+        if (!this.currentScan.rackNo || !this.currentScan.shelfNo) {
+            this.toast('❌ Rack and Shelf are mandatory');
+            return;
+        }
+
         // Save new rack/shelf options to dropdown
         if (this.currentScan.rackNo) {
             this.saveLocationOption('rackLocations', this.currentScan.rackNo, 'rack-list');

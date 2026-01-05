@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pivot Dashboard - Enterprise View</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #1e293b;
+            --card: rgba(30, 41, 59, 0.7);
+            --header: rgba(15, 23, 42, 0.8);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+
+            --accent: #06b6d4;
+            /* Cyan */
+            --accent-glow: rgba(6, 182, 212, 0.5);
+            --secondary: #8b5cf6;
+            /* Purple */
+
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo span {
+            background: linear-gradient(135deg, var(--accent), var(--secondary));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-item {
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .nav-item:hover,
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+        }
+
+        .nav-item.active {
+            background: rgba(6, 182, 212, 0.1);
+            color: var(--accent);
+            border-left: 3px solid var(--accent);
+        }
+
+        .nav-divider {
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* Unified Nav Bar */
+        nav.suite-nav {
+            padding: 0 30px;
+            background: rgba(15, 23, 42, 0.6);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            height: 50px;
+        }
+
+        .suite-link {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            border-bottom: 2px solid transparent;
+        }
+
+        .suite-link.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .suite-link:hover {
+            color: #fff;
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .top-bar {
+            height: 70px;
+            padding: 0 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            background: var(--header);
+            backdrop-filter: blur(10px);
+        }
+
+        .page-title h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .page-title p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Controls */
+        .controls-bar {
+            padding: 20px 30px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--card);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .control-group label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .control-group select,
+        .control-group input {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 0.9rem;
+            outline: none;
+            min-width: 100px;
+        }
+
+        .control-group select option {
+            background: var(--sidebar);
+        }
+
+        .btn-export {
+            margin-left: auto;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-export:hover {
+            opacity: 0.9;
+        }
+
+        /* Matrix Grid */
+        .matrix-container {
+            flex: 1;
+            overflow: auto;
+            padding: 0 30px 30px 30px;
+        }
+
+        .matrix-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.9rem;
+        }
+
+        .matrix-table th {
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--accent);
+            z-index: 10;
+        }
+
+        .matrix-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .matrix-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Group Headers */
+        .group-header td {
+            background: rgba(6, 182, 212, 0.05);
+            font-weight: 600;
+            color: var(--accent);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .group-header:hover td {
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .toggle-icon {
+            display: inline-block;
+            width: 20px;
+            transition: transform 0.2s;
+        }
+
+        .group-header.collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        /* Badges */
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.in {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+
+        .badge.out {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        .badge.rack {
+            background: rgba(139, 92, 246, 0.2);
+            color: var(--secondary);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        /* Loading */
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(6, 182, 212, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+    <!-- Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Auth Check -->
+    <script>
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+            window.location.href = '/';
+        } else {
+            const user = JSON.parse(userData);
+            if (user.role !== 'admin' && user.role !== 'superadmin') {
+                window.location.href = '/app';
+            }
+        }
+    </script>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="logo">
+            <span>⚡</span> LabelSync Pro
+        </div>
+
+        <a href="/admin" class="nav-item">
+            <span>🏠</span> Dashboard
+        </a>
+        <a href="/pivot" class="nav-item active">
+            <span>📊</span> Pivot View
+        </a>
+        <a href="/analytics" class="nav-item">
+            <span>📈</span> Analytics
+        </a>
+
+        <div class="nav-divider"></div>
+
+        <a href="/users" class="nav-item">
+            <span>👥</span> Users
+        </a>
+        <a href="/branches" class="nav-item">
+            <span>🏢</span> Branches
+        </a>
+
+        <div style="margin-top: auto;">
+            <a onclick="logout()" class="nav-item">
+                <span>🚪</span> Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Pivot Dashboard</h1>
+                <p>Advanced inventory analysis & data view</p>
+            </div>
+
+            <div class="user-profile">
+                <span style="font-size: 0.9rem; color: var(--text-muted);">Signed in as </span>
+                <strong id="user-name" style="color: var(--accent);">Admin</strong>
+            </div>
+        </div>
+
+
+
+        <div class="controls-bar">
+            <div class="control-group">
+                <label>Group By:</label>
+                <select id="group-by" onchange="renderMatrix()">
+                    <option value="flavour">Flavour</option>
+                    <option value="batch_no">Batch Number</option>
+                    <option value="rack_no">Rack Location</option>
+                    <option value="none">No Grouping (Flat)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Filter Status:</label>
+                <select id="filter-status" onchange="renderMatrix()">
+                    <option value="all">All Movements</option>
+                    <option value="IN">Stock IN only</option>
+                    <option value="OUT">Stock OUT only</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Branch:</label>
+                <select id="branch-select" onchange="loadData()">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>🔍</label>
+                <input type="text" id="search" placeholder="Search batch, flavour..." onkeyup="renderMatrix()">
+            </div>
+
+            <button class="btn-export" onclick="exportData()">⬇ Export CSV</button>
+        </div>
+
+        <div class="matrix-container">
+            <table class="matrix-table">
+                <thead>
+                    <tr>
+                        <th width="40">#</th>
+                        <th>Flavour</th>
+                        <th>Batch No</th>
+                        <th>Location</th>
+                        <th>Dates</th>
+                        <th>Status</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="matrix-body">
+                    <!-- Data injected here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="loading" class="loading-overlay">
+            <div class="spinner"></div>
+        </div>
+    </main>
+
+    <script>
+        let rawData = [];
+        const user = JSON.parse(localStorage.getItem('user'));
+        document.getElementById('user-name').textContent = user.name;
+
+        // Ensure Superadmin can see branch filter
+        if (user.role !== 'superadmin') {
+            document.getElementById('branch-select').parentElement.style.display = 'none';
+        }
+
+        async function init() {
+            if (user.role === 'superadmin') {
+                await loadBranches();
+            }
+            await loadData();
+        }
+
+        async function loadBranches() {
+            try {
+                const res = await fetch('/api/admin/branches');
+                const data = await res.json();
+                const select = document.getElementById('branch-select');
+
+                select.innerHTML = '<option value="">All Branches</option>' +
+                    data.branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+            } catch (e) {
+                console.error('Failed to load branches', e);
+            }
+        }
+
+        async function loadData() {
+            const loader = document.getElementById('loading');
+            loader.classList.remove('hidden');
+
+            try {
+                // Determine branch ID
+                let branchId = user.branch_id;
+                if (user.role === 'superadmin') {
+                    const select = document.getElementById('branch-select');
+                    branchId = select.value || null;
+                }
+
+                // Construct URL
+                let url = '/api/admin/pivot';
+                if (branchId) url += `?branch_id=${branchId}`;
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.success) {
+                    rawData = data.scans;
+                    renderMatrix();
+                } else {
+                    alert('Failed to load data: ' + data.error);
+                }
+            } catch (e) {
+                console.error('Data load error', e);
+                alert('Connection error');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        function renderMatrix() {
+            const tbody = document.getElementById('matrix-body');
+            tbody.innerHTML = '';
+
+            const groupBy = document.getElementById('group-by').value;
+            const filterStatus = document.getElementById('filter-status').value;
+            const searchText = document.getElementById('search').value.toLowerCase();
+
+            // 1. Filter Data
+            let filtered = rawData.filter(item => {
+                if (filterStatus !== 'all' && item.movement !== filterStatus) return false;
+
+                if (searchText) {
+                    const searchStr = `${item.batch_no} ${item.flavour} ${item.rack_no}`.toLowerCase();
+                    if (!searchStr.includes(searchText)) return false;
+                }
+                return true;
+            });
+
+            // 2. Group Data
+            if (groupBy === 'none') {
+                renderRows(tbody, filtered);
+            } else {
+                // Grouping Logic
+                const groups = {};
+                filtered.forEach(item => {
+                    const key = item[groupBy] || 'Unassigned';
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(item);
+                });
+
+                // Sort keys alphabetically
+                Object.keys(groups).sort().forEach(groupKey => {
+                    const items = groups[groupKey];
+                    const groupRow = document.createElement('tr');
+                    groupRow.className = 'group-header';
+                    groupRow.innerHTML = `
+                        <td colspan="7" onclick="toggleGroup(this)">
+                            <span class="toggle-icon">▼</span> 
+                            ${formatGroupKey(groupBy, groupKey)} 
+                            <span style="font-weight:400; opacity:0.7; margin-left:10px">(${items.length} records)</span>
+                        </td>
+                    `;
+                    tbody.appendChild(groupRow);
+
+                    // Create a container for rows (using a fragment for performance)
+                    items.forEach((item, index) => {
+                        const tr = createRow(item, index + 1);
+                        tr.setAttribute('data-group', groupKey); // Marker for toggling
+                        tbody.appendChild(tr);
+                    });
+                });
+            }
+        }
+
+        function formatGroupKey(type, key) {
+            if (type === 'flavour') return `🍬 ${key}`;
+            if (type === 'rack_no') return `🗄️ ${key}`;
+            if (type === 'batch_no') return `🔖 Batch: ${key}`;
+            return key;
+        }
+
+        function toggleGroup(td) {
+            const tr = td.parentElement;
+            tr.classList.toggle('collapsed');
+
+            // Find next siblings until next group header
+            let next = tr.nextElementSibling;
+            while (next && !next.classList.contains('group-header')) {
+                next.style.display = tr.classList.contains('collapsed') ? 'none' : 'table-row';
+                next = next.nextElementSibling;
+            }
+        }
+
+        function renderRows(tbody, items) {
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted)">No records found</td></tr>';
+                return;
+            }
+            items.forEach((item, index) => {
+                tbody.appendChild(createRow(item, index + 1));
+            });
+        }
+
+        function createRow(item, index) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${index}</td>
+                <td style="font-weight:500; color:var(--text)">${item.flavour || '-'}</td>
+                <td style="font-family:monospace; color:var(--accent)">${item.batch_no || '-'}</td>
+                <td>
+                    ${item.rack_no ? `<span class="badge rack">${item.rack_no}</span>` : ''} 
+                    ${item.shelf_no ? `<small style="opacity:0.7">/ ${item.shelf_no}</small>` : ''}
+                </td>
+                <td style="font-size:0.85rem">
+                    <div style="opacity:0.8">MFG: ${item.mfg_date || 'N/A'}</div>
+                    <div style="opacity:0.6">EXP: ${item.expiry_date || 'N/A'}</div>
+                </td>
+                <td><span class="badge ${item.movement.toLowerCase()}">${item.movement}</span></td>
+                <td style="color:var(--text-muted); font-size:0.8rem">${item.timestamp}</td>
+            `;
+            return tr;
+        }
+
+        function exportData() {
+            // Re-use existing export endpoint
+            let branchId = user.branch_id;
+            if (user.role === 'superadmin') {
+                branchId = document.getElementById('branch-select').value;
+            }
+            let url = '/api/admin/export';
+            if (branchId) url += `?branch_id=${branchId}`;
+            window.location.href = url;
+        }
+
+        async function logout() {
+            try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { }
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
