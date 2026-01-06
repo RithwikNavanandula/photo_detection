@@ -313,14 +313,26 @@ def manage_branches():
 @app.route('/api/users', methods=['GET'])
 @admin_required
 def list_users():
-    """Admin only: list all users with branch info"""
+    """Admin only: list users with branch info (filtered by branch for admins)"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('''
-        SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name
-        FROM users u
-        LEFT JOIN branches b ON u.branch_id = b.id
-    ''')
+    
+    # Superadmin sees all users, admin sees only their branch
+    if session.get('role') == 'superadmin':
+        cursor.execute('''
+            SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name
+            FROM users u
+            LEFT JOIN branches b ON u.branch_id = b.id
+        ''')
+    else:
+        branch_id = session.get('branch_id')
+        cursor.execute('''
+            SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name
+            FROM users u
+            LEFT JOIN branches b ON u.branch_id = b.id
+            WHERE u.branch_id = ?
+        ''', (branch_id,))
+    
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'users': users})
@@ -375,7 +387,7 @@ def reject_user():
 @app.route('/api/admin/users/change-password', methods=['POST'])
 @admin_required
 def change_user_password():
-    """Change a user's password"""
+    """Change a user's password (admins can only change passwords for users in their branch)"""
     data = request.get_json()
     user_id = data.get('id')
     new_password = data.get('password')
@@ -388,6 +400,15 @@ def change_user_password():
     
     conn = get_db()
     cursor = conn.cursor()
+    
+    # Check if admin has permission to change this user's password
+    if session.get('role') != 'superadmin':
+        cursor.execute('SELECT branch_id FROM users WHERE id = ?', (user_id,))
+        target_user = cursor.fetchone()
+        if not target_user or target_user['branch_id'] != session.get('branch_id'):
+            conn.close()
+            return jsonify({'success': False, 'error': 'You can only change passwords for users in your branch'}), 403
+    
     cursor.execute('UPDATE users SET password = ? WHERE id = ?', (hash_password(new_password), user_id))
     conn.commit()
     conn.close()
