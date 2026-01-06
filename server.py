@@ -992,11 +992,13 @@ def get_pivot_data():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Base query
+    # Base query - match CSV export columns
     query = '''
         SELECT s.id, s.timestamp, s.batch_no, s.mfg_date, s.expiry_date, 
-               s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id, s.synced_by
+               s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id, 
+               s.synced_by, b.name as branch_name
         FROM scans s
+        LEFT JOIN branches b ON s.branch_id = b.id
     '''
     params = []
     
