@@ -30,9 +30,9 @@ def setup_database():
     cursor.execute('''
         CREATE TABLE branches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            code TEXT NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            name TEXT NOT NULL,
+            code TEXT UNIQUE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     print("Created table: branches")
@@ -64,9 +64,8 @@ def setup_database():
             shelf_no TEXT,
             movement TEXT DEFAULT 'IN',
             synced_by TEXT,
-            branch_id INTEGER,
-            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            branch_id INTEGER REFERENCES branches(id),
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     print("Created table: scans")
