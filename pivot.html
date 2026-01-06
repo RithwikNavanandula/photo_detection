@@ -598,11 +598,39 @@
             });
 
             // 2. Sort Data
-            filtered.sort((a, b) => {
-                if (sortBy === 'newest') return b.id - a.id;
-                if (sortBy === 'oldest') return a.id - b.id;
+            // Parse timestamp like "6/1/2026, 8:53:44 am" to Date object
+            const parseTimestamp = (ts) => {
+                if (!ts) return new Date(0);
+                try {
+                    // Format: "M/D/YYYY, H:MM:SS am/pm"
+                    const [datePart, timePart] = ts.split(', ');
+                    if (!datePart) return new Date(0);
+                    const [month, day, year] = datePart.split('/').map(Number);
+                    if (timePart) {
+                        const timeMatch = timePart.match(/(\d+):(\d+):(\d+)\s*(am|pm)/i);
+                        if (timeMatch) {
+                            let [, hours, minutes, seconds, ampm] = timeMatch;
+                            hours = parseInt(hours);
+                            if (ampm.toLowerCase() === 'pm' && hours !== 12) hours += 12;
+                            if (ampm.toLowerCase() === 'am' && hours === 12) hours = 0;
+                            return new Date(year, month - 1, day, hours, parseInt(minutes), parseInt(seconds));
+                        }
+                    }
+                    return new Date(year, month - 1, day);
+                } catch (e) {
+                    return new Date(0);
+                }
+            };
 
-                // Date Sorting Helper
+            filtered.sort((a, b) => {
+                if (sortBy === 'newest') {
+                    return parseTimestamp(b.timestamp) - parseTimestamp(a.timestamp);
+                }
+                if (sortBy === 'oldest') {
+                    return parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp);
+                }
+
+                // Expiry date sorting
                 const getExp = (item) => {
                     if (!item.expiry_date) return '';
                     return item.expiry_date;
@@ -620,7 +648,7 @@
                     if (parts.length === 3) {
                         let y = parts[2];
                         if (y.length === 2) y = '20' + y;
-                        return `${y}${parts[1]}${parts[0]}`;
+                        return `${y}${parts[1].padStart(2, '0')}${parts[0].padStart(2, '0')}`;
                     }
                     return d;
                 };
