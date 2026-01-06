@@ -372,6 +372,28 @@ def reject_user():
     
     return jsonify({'success': True})
 
+@app.route('/api/admin/users/change-password', methods=['POST'])
+@admin_required
+def change_user_password():
+    """Change a user's password"""
+    data = request.get_json()
+    user_id = data.get('id')
+    new_password = data.get('password')
+    
+    if not user_id or not new_password:
+        return jsonify({'success': False, 'error': 'User ID and password required'}), 400
+    
+    if len(new_password) < 4:
+        return jsonify({'success': False, 'error': 'Password must be at least 4 characters'}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET password = ? WHERE id = ?', (hash_password(new_password), user_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
+
 @app.route('/api/admin/dashboard', methods=['GET'])
 @admin_required
 def admin_dashboard():
@@ -381,7 +403,6 @@ def admin_dashboard():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Build WHERE clause for branch filtering
     branch_where = ''
     branch_params = ()
     if branch_id:

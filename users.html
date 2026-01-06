@@ -311,6 +311,22 @@
             background: rgba(245, 158, 11, 0.2);
             color: var(--warning);
         }
+
+        .btn-password {
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .btn-password:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
     </style>
 </head>
 
@@ -435,10 +451,39 @@
                 <div class="user-card active">
                     <div class="user-info">
                         <h3>${user.name} (@${user.username}) <span class="role ${user.role}">${user.role}</span></h3>
-                        <p>Status: <span class="status-badge active">Active</span></p>
+                        <p>Branch: <strong>${user.branch_name || 'Not Assigned'}</strong> | Status: <span class="status-badge active">Active</span></p>
+                    </div>
+                    <div class="user-actions">
+                        <button class="btn btn-password" onclick="changePassword(${user.id}, '${user.username}')">🔑 Change Password</button>
                     </div>
                 </div>
             `).join('');
+        }
+
+        async function changePassword(userId, username) {
+            const newPassword = prompt('Enter new password for @' + username + ':');
+            if (!newPassword) return;
+
+            if (newPassword.length < 4) {
+                alert('Password must be at least 4 characters');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/admin/users/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: userId, password: newPassword })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Password changed successfully!');
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to change password'));
+                }
+            } catch (err) {
+                alert('Connection error');
+            }
         }
 
         async function approveUser(id) {
