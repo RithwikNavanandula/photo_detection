@@ -1,14 +1,15 @@
 /* ===== Variables ===== */
 :root {
-    --bg: #0f0f1a;
-    --card: rgba(30, 30, 50, 0.9);
-    --accent: #00d4ff;
-    --accent2: #7c3aed;
+    --bg: #1e1e2e;
+    --card: rgba(45, 45, 68, 0.9);
+    --accent: #6c63ff;
+    --accent2: #4a4a6a;
     --text: #ffffff;
     --text2: #a0a0b0;
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
+    --error: #ef4444;
     --radius: 12px;
 }
 

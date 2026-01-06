@@ -14,12 +14,12 @@
         }
 
         :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --text: #f1f5f9;
-            --text2: #94a3b8;
-            --accent: #00d4ff;
-            --accent2: #7c3aed;
+            --bg: #1e1e2e;
+            --card: #2d2d44;
+            --text: #ffffff;
+            --text2: #a0a0b0;
+            --accent: #6c63ff;
+            --accent2: #4a4a6a;
             --success: #10b981;
             --warning: #f59e0b;
             --error: #ef4444;
@@ -37,7 +37,7 @@
         .sidebar {
             width: 220px;
             min-height: 100vh;
-            background: linear-gradient(180deg, #16213e 0%, #0f0f23 100%);
+            background: #2d2d44;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             padding: 20px 12px;
             position: fixed;
@@ -52,10 +52,7 @@
         .sidebar-logo {
             font-size: 1.2rem;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #6c63ff;
             padding: 12px 8px;
             margin-bottom: 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -67,29 +64,27 @@
             gap: 10px;
             padding: 12px 14px;
             border: none;
-            border-radius: 10px;
+            border-radius: 6px;
             background: transparent;
-            color: var(--text2);
+            color: #a0a0b0;
             font-size: 0.9rem;
             cursor: pointer;
-            transition: all 0.2s;
             text-align: left;
             width: 100%;
         }
 
         .sidebar-btn:hover {
             background: rgba(255, 255, 255, 0.1);
-            color: var(--text);
+            color: #ffffff;
         }
 
         .sidebar-btn.active {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(124, 58, 237, 0.2));
-            color: var(--accent);
-            border: 1px solid rgba(0, 212, 255, 0.3);
+            background: #6c63ff;
+            color: #ffffff;
         }
 
         .sidebar-btn.danger {
-            color: var(--error);
+            color: #ef4444;
         }
 
         .sidebar-btn.danger:hover {
@@ -104,7 +99,7 @@
 
         .sidebar-section {
             font-size: 0.7rem;
-            color: var(--text2);
+            color: #a0a0b0;
             text-transform: uppercase;
             letter-spacing: 1px;
             padding: 8px 14px;
