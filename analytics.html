@@ -355,8 +355,44 @@
                 </div>
             </div>
 
+            <!-- Expiry Alert Stats -->
+            <div class="stats-summary">
+                <div class="stat-box" style="border-left: 4px solid #ef4444;">
+                    <div class="value" id="expiring-week" style="color: #ef4444;">-</div>
+                    <div class="label">🚨 Expiring This Week</div>
+                </div>
+                <div class="stat-box" style="border-left: 4px solid #f59e0b;">
+                    <div class="value" id="expiring-2weeks" style="color: #f59e0b;">-</div>
+                    <div class="label">⚠️ Expiring in 2 Weeks</div>
+                </div>
+                <div class="stat-box" style="border-left: 4px solid #3b82f6;">
+                    <div class="value" id="expiring-month">-</div>
+                    <div class="label">📅 Expiring in 30 Days</div>
+                </div>
+                <div class="stat-box" style="border-left: 4px solid #6c63ff;">
+                    <div class="value" id="total-stock">-</div>
+                    <div class="label">📦 Current Stock</div>
+                </div>
+            </div>
+
             <!-- Charts -->
             <div class="charts-grid">
+                <!-- Expiry Forecast - TOP PRIORITY -->
+                <div class="chart-card full-width">
+                    <h3>⏰ Expiry Forecast (Next 20 Weeks)</h3>
+                    <div class="chart-container" style="height: 350px;">
+                        <canvas id="expiryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Daily Activity -->
+                <div class="chart-card full-width">
+                    <h3>📈 Daily Activity (Last 7 Days)</h3>
+                    <div class="chart-container">
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                </div>
+
                 <!-- Rack Distribution -->
                 <div class="chart-card">
                     <h3>📦 Stock by Rack</h3>
@@ -372,22 +408,6 @@
                         <canvas id="inOutChart"></canvas>
                     </div>
                 </div>
-
-                <!-- Daily Activity -->
-                <div class="chart-card full-width">
-                    <h3>📈 Daily Activity (Last 7 Days)</h3>
-                    <div class="chart-container">
-                        <canvas id="activityChart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Expiry Forecast -->
-                <div class="chart-card full-width">
-                    <h3>⏰ Expiry Forecast (Next 10 Weeks)</h3>
-                    <div class="chart-container" style="height: 300px;">
-                        <canvas id="expiryChart"></canvas>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -401,9 +421,6 @@
 
                     // Update stats
                     document.getElementById('total-stock').textContent = data.stats.current;
-                    document.getElementById('total-in').textContent = data.stats.in;
-                    document.getElementById('total-out').textContent = data.stats.out;
-                    document.getElementById('total-racks').textContent = data.stats.active_racks;
 
                     // Render charts
                     renderRackChart(data.racks);
@@ -548,6 +565,13 @@
                     const data = await response.json();
                     if (data.success) {
                         renderExpiryChart(data.labels, data.datasets);
+
+                        // Update expiry stats
+                        if (data.expiry_stats) {
+                            document.getElementById('expiring-week').textContent = data.expiry_stats.this_week || 0;
+                            document.getElementById('expiring-2weeks').textContent = data.expiry_stats.two_weeks || 0;
+                            document.getElementById('expiring-month').textContent = data.expiry_stats.thirty_days || 0;
+                        }
                     }
                 } catch (err) {
                     console.error('Failed to load expiry forecast:', err);

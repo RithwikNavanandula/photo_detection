@@ -682,7 +682,7 @@ def get_expiry_forecast():
     
     # Parse expiry dates and group by week and flavor
     flavors = set()
-    week_data = {i: {} for i in range(1, 11)}  # Weeks 1-10
+    week_data = {i: {} for i in range(1, 21)}  # Weeks 1-20
     
     for item in items:
         flavor = item['flavour'] or 'Unknown'
@@ -691,9 +691,9 @@ def get_expiry_forecast():
         
         flavors.add(flavor)
         
-        # Parse date (try multiple formats)
+        # Parse date (try multiple formats including 2-digit year)
         expiry_date = None
-        for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y']:
+        for fmt in ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%m/%d/%y']:
             try:
                 expiry_date = datetime.strptime(expiry_str, fmt).date()
                 break
@@ -709,8 +709,8 @@ def get_expiry_forecast():
             continue  # Already expired
         
         week_num = (days_until_expiry // 7) + 1
-        if week_num > 10:
-            continue  # Beyond 10 weeks
+        if week_num > 20:
+            continue  # Beyond 20 weeks
         
         # Add to week data
         if flavor not in week_data[week_num]:
@@ -726,7 +726,7 @@ def get_expiry_forecast():
     
     for idx, flavor in enumerate(flavor_list):
         data = []
-        for week in range(1, 11):
+        for week in range(1, 21):
             data.append(week_data[week].get(flavor, 0))
         
         datasets.append({
@@ -735,10 +735,106 @@ def get_expiry_forecast():
             'backgroundColor': colors[idx % len(colors)]
         })
     
+    # Calculate expiry stats
+    expiring_week = sum(sum(week_data[1].values()) if week_data[1] else 0 for _ in [1])
+    expiring_2weeks = sum(sum(week_data[w].values()) for w in range(1, 3) if week_data[w])
+    expiring_month = sum(sum(week_data[w].values()) for w in range(1, 5) if week_data[w])  # ~4 weeks = 30 days
+    
     return jsonify({
         'success': True,
-        'labels': [f'Week {i}' for i in range(1, 11)],
-        'datasets': datasets
+        'labels': [f'Week {i}' for i in range(1, 21)],
+        'datasets': datasets,
+        'expiry_stats': {
+            'this_week': expiring_week,
+            'two_weeks': expiring_2weeks,
+            'thirty_days': expiring_month
+        }
+    })
+
+@app.route('/api/admin/expiry-items')
+@admin_required
+def get_expiry_items():
+    """Get detailed items expiring in a specific week"""
+    week = request.args.get('week', type=int)
+    flavor = request.args.get('flavor', '')
+    branch_id = request.args.get('branch_id', type=int)
+    
+    if not week:
+        return jsonify({'success': False, 'error': 'Week is required'}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    from datetime import datetime, timedelta
+    
+    today = datetime.now().date()
+    
+    # Calculate date range for the week
+    week_start = today + timedelta(days=(week - 1) * 7)
+    week_end = today + timedelta(days=week * 7)
+    
+    # Get all items with expiry dates
+    branch_filter = ''
+    params = []
+    if branch_id:
+        branch_filter = ' AND branch_id = ?'
+        params.append(branch_id)
+    
+    cursor.execute(f'''
+        SELECT batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no
+        FROM scans
+        WHERE expiry_date IS NOT NULL AND expiry_date != '' {branch_filter}
+        AND movement = 'IN'
+        ORDER BY expiry_date
+    ''', params)
+    
+    items_raw = cursor.fetchall()
+    conn.close()
+    
+    # Filter by week and optionally by flavor
+    items = []
+    for item in items_raw:
+        expiry_str = item['expiry_date']
+        
+        # Parse date
+        expiry_date = None
+        for fmt in ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%m/%d/%y']:
+            try:
+                expiry_date = datetime.strptime(expiry_str, fmt).date()
+                break
+            except:
+                continue
+        
+        if not expiry_date:
+            continue
+        
+        # Check if in the requested week
+        days_until_expiry = (expiry_date - today).days
+        if days_until_expiry < 0:
+            continue
+        
+        item_week = (days_until_expiry // 7) + 1
+        if item_week != week:
+            continue
+        
+        # Filter by flavor if specified
+        if flavor and item['flavour'] != flavor:
+            continue
+        
+        items.append({
+            'batch_no': item['batch_no'] or '-',
+            'mfg_date': item['mfg_date'] or '-',
+            'expiry_date': item['expiry_date'] or '-',
+            'flavour': item['flavour'] or '-',
+            'rack_no': item['rack_no'] or '-',
+            'shelf_no': item['shelf_no'] or '-'
+        })
+    
+    return jsonify({
+        'success': True,
+        'items': items,
+        'week': week,
+        'flavor': flavor
     })
 
 @app.route('/api/sync', methods=['POST'])

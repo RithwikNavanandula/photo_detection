@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Label Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg: #1e1e2e;
@@ -824,50 +825,71 @@
                 </div>
             </header>
 
-            <!-- Stats -->
+            <!-- Expiry Alert Stats -->
             <div class="stats-row">
-                <div class="stat-card">
+                <div class="stat-card" style="border-left: 4px solid #ef4444;">
+                    <div class="stat-value" id="expiring-week" style="color: #ef4444;">-</div>
+                    <div class="stat-label">🚨 Expiring This Week</div>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #f59e0b;">
+                    <div class="stat-value" id="expiring-2weeks" style="color: #f59e0b;">-</div>
+                    <div class="stat-label">⚠️ Expiring in 2 Weeks</div>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #3b82f6;">
+                    <div class="stat-value" id="expiring-month">-</div>
+                    <div class="stat-label">📅 Expiring in 30 Days</div>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #6c63ff;">
                     <div class="stat-value" id="current-stock">-</div>
                     <div class="stat-label">📦 Current Stock</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="total-scans">-</div>
-                    <div class="stat-label">Total Scans</div>
+            </div>
+
+            <!-- Dashboard Grid - 2 Column Layout -->
+            <div class="dashboard-grid" style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
+                <!-- Column 1: Expiry Forecast Chart -->
+                <div class="card">
+                    <h2>⏰ Expiry Forecast (Next 20 Weeks)</h2>
+                    <div style="height: 350px;">
+                        <canvas id="expiryChart"></canvas>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="total-in">-</div>
-                    <div class="stat-label">⬇️ Items In</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="total-out">-</div>
-                    <div class="stat-label">⬆️ Items Out</div>
+
+                <!-- Column 2: Items Expiring Soon -->
+                <div class="card">
+                    <h2>🚨 Items Expiring Soon</h2>
+                    <div id="expiring-list" style="max-height: 350px; overflow-y: auto;">
+                        <div class="loading">Loading...</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Dashboard Grid - 3 Column Layout -->
-            <div class="dashboard-3col">
-                <!-- Column 1: Rack Status -->
-                <div class="card rack-panel">
-                    <h2>🗄️ Rack Status</h2>
-                    <div id="rack-grid" class="rack-grid">
-                        <div class="loading">Loading...</div>
-                    </div>
+            <!-- Expiry Details Panel (shown when clicking chart) -->
+            <div id="expiry-details-panel" class="card" style="margin-top: 20px; display: none;">
+                <h2 id="expiry-details-title">📋 Expiry Details</h2>
+                <div id="expiry-details-content" style="overflow-x: auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                        <thead>
+                            <tr style="background:rgba(255,255,255,0.05);text-align:left;">
+                                <th style="padding:10px;color:var(--text2);">Batch No</th>
+                                <th style="padding:10px;color:var(--text2);">Mfg Date</th>
+                                <th style="padding:10px;color:var(--text2);">Expiry Date</th>
+                                <th style="padding:10px;color:var(--text2);">Flavour</th>
+                                <th style="padding:10px;color:var(--text2);">Rack</th>
+                                <th style="padding:10px;color:var(--text2);">Shelf</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expiry-details-body">
+                        </tbody>
+                    </table>
                 </div>
+            </div>
 
-                <!-- Column 2: Selected Rack Details -->
-                <div class="card detail-panel">
-                    <h2>📦 Shelf Details</h2>
-                    <div id="shelf-details" class="shelf-details">
-                        <div class="no-data">Click on a rack to see shelves</div>
-                    </div>
-                </div>
-
-                <!-- Column 3: Recent Activity -->
-                <div class="card activity-panel">
-                    <h2>📋 Recent Activity</h2>
-                    <div id="activity-list" class="activity-list">
-                        <div class="loading">Loading...</div>
-                    </div>
+            <!-- Recent Activity -->
+            <div class="card" style="margin-top: 20px;">
+                <h2>📋 Recent Activity</h2>
+                <div id="activity-list" class="activity-list">
+                    <div class="loading">Loading...</div>
                 </div>
             </div>
         </div>
@@ -963,36 +985,182 @@
                 loadDashboard();
             });
 
+            // Expiry chart instance
+            let expiryChart = null;
+
             // Load dashboard data
             async function loadDashboard() {
                 try {
                     const branchId = getBranchId();
-                    const sortValue = document.getElementById('sort-filter').value;
 
                     const params = new URLSearchParams();
                     if (branchId) params.append('branch_id', branchId);
-                    params.append('sort', sortValue);
 
-                    const url = `/api/admin/dashboard?${params.toString()}`;
-                    const response = await fetch(url);
-                    const data = await response.json();
+                    // Load basic stats
+                    const statsUrl = `/api/admin/dashboard?${params.toString()}`;
+                    const statsResponse = await fetch(statsUrl);
+                    const statsData = await statsResponse.json();
 
-                    // Update stats
-                    document.getElementById('current-stock').textContent = data.stats.current;
-                    document.getElementById('total-scans').textContent = data.stats.total;
-                    document.getElementById('total-in').textContent = data.stats.in;
-                    document.getElementById('total-out').textContent = data.stats.out;
-
-                    // Render rack status with shelf data
-                    renderRackStatus(data.racks, data.rack_items || {});
+                    // Update current stock
+                    document.getElementById('current-stock').textContent = statsData.stats.current;
 
                     // Render activity
-                    renderActivity(data.activity);
+                    renderActivity(statsData.activity);
+
+                    // Load expiry forecast
+                    const expiryUrl = `/api/admin/expiry-forecast?${params.toString()}`;
+                    const expiryResponse = await fetch(expiryUrl);
+                    const expiryData = await expiryResponse.json();
+
+                    if (expiryData.success) {
+                        // Update expiry stats
+                        if (expiryData.expiry_stats) {
+                            document.getElementById('expiring-week').textContent = expiryData.expiry_stats.this_week || 0;
+                            document.getElementById('expiring-2weeks').textContent = expiryData.expiry_stats.two_weeks || 0;
+                            document.getElementById('expiring-month').textContent = expiryData.expiry_stats.thirty_days || 0;
+                        }
+
+                        // Render expiry chart
+                        renderExpiryChart(expiryData.labels, expiryData.datasets);
+
+                        // Render expiring soon list
+                        renderExpiringList(expiryData.datasets);
+                    }
                 } catch (err) {
                     console.error('Failed to load dashboard:', err);
-                    document.getElementById('rack-grid').innerHTML = '<div class="no-data">Failed to load data</div>';
                     document.getElementById('activity-list').innerHTML = '<div class="no-data">Failed to load data</div>';
                 }
+            }
+
+            function renderExpiryChart(labels, datasets) {
+                const ctx = document.getElementById('expiryChart').getContext('2d');
+
+                if (expiryChart) expiryChart.destroy();
+
+                expiryChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const element = elements[0];
+                                const datasetIndex = element.datasetIndex;
+                                const index = element.index;
+                                const flavor = datasets[datasetIndex].label;
+                                const week = index + 1;
+                                const count = datasets[datasetIndex].data[index];
+
+                                if (count > 0) {
+                                    showExpiryDetails(week, flavor);
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { color: '#94a3b8' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                stacked: true,
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            },
+                            x: {
+                                stacked: true,
+                                ticks: { color: '#94a3b8' },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+
+            async function showExpiryDetails(week, flavor) {
+                const panel = document.getElementById('expiry-details-panel');
+                const title = document.getElementById('expiry-details-title');
+                const tbody = document.getElementById('expiry-details-body');
+
+                // Show panel and scroll to it
+                panel.style.display = 'block';
+                title.textContent = `📋 Items Expiring Week ${week} - ${flavor}`;
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text2)">Loading...</td></tr>';
+
+                // Smooth scroll to panel
+                setTimeout(() => {
+                    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+
+                try {
+                    const branchId = getBranchId();
+                    const params = new URLSearchParams();
+                    params.append('week', week);
+                    params.append('flavor', flavor);
+                    if (branchId) params.append('branch_id', branchId);
+
+                    const response = await fetch(`/api/admin/expiry-items?${params.toString()}`);
+                    const data = await response.json();
+
+                    if (data.success && data.items.length > 0) {
+                        tbody.innerHTML = data.items.map(item => `
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                <td style="padding:10px;color:var(--accent);font-family:monospace;">${item.batch_no}</td>
+                                <td style="padding:10px;color:var(--text2);">${item.mfg_date}</td>
+                                <td style="padding:10px;color:#ef4444;font-weight:600;">${item.expiry_date}</td>
+                                <td style="padding:10px;color:var(--text);">${item.flavour}</td>
+                                <td style="padding:10px;"><span style="background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:0.8rem;">${item.rack_no}</span></td>
+                                <td style="padding:10px;color:var(--text2);">${item.shelf_no}</td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text2)">No items found</td></tr>';
+                    }
+                } catch (err) {
+                    console.error('Failed to load expiry details:', err);
+                    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#ef4444">Failed to load data</td></tr>';
+                }
+            }
+
+            function renderExpiringList(datasets) {
+                const container = document.getElementById('expiring-list');
+
+                // Get items from first 4 weeks (urgent)
+                let items = [];
+                datasets.forEach(ds => {
+                    for (let w = 0; w < 4; w++) {
+                        if (ds.data[w] > 0) {
+                            items.push({
+                                flavor: ds.label,
+                                week: w + 1,
+                                count: ds.data[w]
+                            });
+                        }
+                    }
+                });
+
+                // Sort by week (most urgent first)
+                items.sort((a, b) => a.week - b.week);
+
+                if (items.length === 0) {
+                    container.innerHTML = '<div class="no-data">No items expiring in next 4 weeks</div>';
+                    return;
+                }
+
+                container.innerHTML = items.map(item => `
+                    <div style="display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);align-items:center;">
+                        <div>
+                            <strong style="color:var(--text)">${item.flavor}</strong>
+                            <div style="font-size:0.8rem;color:var(--text2)">Week ${item.week}</div>
+                        </div>
+                        <span style="background:${item.week === 1 ? '#ef4444' : item.week <= 2 ? '#f59e0b' : '#3b82f6'};color:#fff;padding:4px 10px;border-radius:12px;font-size:0.85rem;font-weight:600;">
+                            ${item.count} items
+                        </span>
+                    </div>
+                `).join('');
             }
 
             // Store rack data globally for panel use
