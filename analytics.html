@@ -380,11 +380,19 @@
                         <canvas id="activityChart"></canvas>
                     </div>
                 </div>
+
+                <!-- Expiry Forecast -->
+                <div class="chart-card full-width">
+                    <h3>⏰ Expiry Forecast (Next 10 Weeks)</h3>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="expiryChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
         <script>
-            let rackChart, inOutChart, activityChart;
+            let rackChart, inOutChart, activityChart, expiryChart;
 
             async function loadAnalytics() {
                 try {
@@ -401,6 +409,9 @@
                     renderRackChart(data.racks);
                     renderInOutChart(data.stats.in, data.stats.out);
                     renderActivityChart(data.daily);
+
+                    // Load expiry forecast separately
+                    loadExpiryForecast();
                 } catch (err) {
                     console.error('Failed to load analytics:', err);
                 }
@@ -525,6 +536,70 @@
                             x: {
                                 ticks: { color: '#94a3b8' },
                                 grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+
+            async function loadExpiryForecast() {
+                try {
+                    const response = await fetch('/api/admin/expiry-forecast');
+                    const data = await response.json();
+                    if (data.success) {
+                        renderExpiryChart(data.labels, data.datasets);
+                    }
+                } catch (err) {
+                    console.error('Failed to load expiry forecast:', err);
+                }
+            }
+
+            function renderExpiryChart(labels, datasets) {
+                const ctx = document.getElementById('expiryChart').getContext('2d');
+
+                if (expiryChart) expiryChart.destroy();
+
+                expiryChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { color: '#94a3b8' }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Items Expiring by Flavor (per week)',
+                                color: '#ffffff'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                stacked: true,
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: 'rgba(255,255,255,0.1)' },
+                                title: {
+                                    display: true,
+                                    text: 'Number of Items',
+                                    color: '#94a3b8'
+                                }
+                            },
+                            x: {
+                                stacked: true,
+                                ticks: { color: '#94a3b8' },
+                                grid: { display: false },
+                                title: {
+                                    display: true,
+                                    text: 'Weeks from Today',
+                                    color: '#94a3b8'
+                                }
                             }
                         }
                     }

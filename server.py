@@ -647,6 +647,100 @@ def get_analytics():
         'daily': daily
     })
 
+@app.route('/api/admin/expiry-forecast')
+@admin_required
+def get_expiry_forecast():
+    """Get expiry forecast data - items expiring by flavor across 10 weeks"""
+    branch_id = request.args.get('branch_id', type=int)
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    from datetime import datetime, timedelta
+    
+    today = datetime.now().date()
+    
+    # Get all flavors and their items with expiry dates
+    branch_filter = ''
+    params = []
+    if branch_id:
+        branch_filter = ' AND branch_id = ?'
+        params.append(branch_id)
+    
+    # Query to get all items with expiry dates
+    cursor.execute(f'''
+        SELECT flavour, expiry_date, 
+               SUM(CASE WHEN movement = 'IN' THEN 1 ELSE -1 END) as qty
+        FROM scans
+        WHERE expiry_date IS NOT NULL AND expiry_date != '' {branch_filter}
+        GROUP BY flavour, expiry_date
+        HAVING qty > 0
+    ''', params)
+    
+    items = cursor.fetchall()
+    conn.close()
+    
+    # Parse expiry dates and group by week and flavor
+    flavors = set()
+    week_data = {i: {} for i in range(1, 11)}  # Weeks 1-10
+    
+    for item in items:
+        flavor = item['flavour'] or 'Unknown'
+        expiry_str = item['expiry_date']
+        qty = item['qty']
+        
+        flavors.add(flavor)
+        
+        # Parse date (try multiple formats)
+        expiry_date = None
+        for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y']:
+            try:
+                expiry_date = datetime.strptime(expiry_str, fmt).date()
+                break
+            except:
+                continue
+        
+        if not expiry_date:
+            continue
+        
+        # Calculate weeks from today
+        days_until_expiry = (expiry_date - today).days
+        if days_until_expiry < 0:
+            continue  # Already expired
+        
+        week_num = (days_until_expiry // 7) + 1
+        if week_num > 10:
+            continue  # Beyond 10 weeks
+        
+        # Add to week data
+        if flavor not in week_data[week_num]:
+            week_data[week_num][flavor] = 0
+        week_data[week_num][flavor] += qty
+    
+    # Format response
+    flavor_list = sorted(list(flavors))
+    
+    # Build datasets for each flavor
+    datasets = []
+    colors = ['#6c63ff', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16']
+    
+    for idx, flavor in enumerate(flavor_list):
+        data = []
+        for week in range(1, 11):
+            data.append(week_data[week].get(flavor, 0))
+        
+        datasets.append({
+            'label': flavor,
+            'data': data,
+            'backgroundColor': colors[idx % len(colors)]
+        })
+    
+    return jsonify({
+        'success': True,
+        'labels': [f'Week {i}' for i in range(1, 11)],
+        'datasets': datasets
+    })
+
 @app.route('/api/sync', methods=['POST'])
 @login_required
 def sync_user_scans():
