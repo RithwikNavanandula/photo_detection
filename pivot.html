@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pivot Dashboard - Enterprise View</title>
+    <title>Ledger Entries - Enterprise View</title>
     <style>
         * {
             margin: 0;
@@ -415,7 +415,7 @@
 
         <div class="sidebar-section">Navigation</div>
         <button class="sidebar-btn" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
-        <button class="sidebar-btn active" onclick="location.href='/pivot'">📈 <span>Pivot View</span></button>
+        <button class="sidebar-btn active" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
         <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
         <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
         <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
@@ -434,7 +434,7 @@
     <main class="main">
         <div class="top-bar">
             <div class="page-title">
-                <h1>Pivot Dashboard</h1>
+                <h1>Ledger Entries</h1>
                 <p>Advanced inventory analysis & data view</p>
             </div>
 
@@ -447,15 +447,7 @@
 
 
         <div class="controls-bar">
-            <div class="control-group">
-                <label>Group By:</label>
-                <select id="group-by" onchange="renderMatrix()">
-                    <option value="flavour">Flavour</option>
-                    <option value="batch_no">Batch Number</option>
-                    <option value="rack_no">Rack Location</option>
-                    <option value="none">No Grouping (Flat)</option>
-                </select>
-            </div>
+
 
             <div class="control-group">
                 <label>Filter Status:</label>
@@ -590,7 +582,6 @@
             const tbody = document.getElementById('matrix-body');
             tbody.innerHTML = '';
 
-            const groupBy = document.getElementById('group-by').value;
             const filterStatus = document.getElementById('filter-status').value;
             const sortBy = document.getElementById('sort-by').value;
             const searchText = document.getElementById('search').value.toLowerCase();
@@ -606,7 +597,7 @@
                 return true;
             });
 
-            // 1.5 Sort Data (Client-Side)
+            // 2. Sort Data
             filtered.sort((a, b) => {
                 if (sortBy === 'newest') return b.id - a.id;
                 if (sortBy === 'oldest') return a.id - b.id;
@@ -614,10 +605,6 @@
                 // Date Sorting Helper
                 const getExp = (item) => {
                     if (!item.expiry_date) return '';
-                    // Handle DD/MM/YYYY or similar
-                    // Simplest for now: string compare if strict ISO not guaranteed. 
-                    // Better: parse. But given mixed data, string compare might be consistent enough or parse if possible.
-                    // Let's assume text comparison for now or crude parsing if format is DD/MM/YY
                     return item.expiry_date;
                 };
 
@@ -625,15 +612,12 @@
                 const dateB = getExp(b);
 
                 if (!dateA && !dateB) return 0;
-                if (!dateA) return 1; // Empty dates last
+                if (!dateA) return 1;
                 if (!dateB) return -1;
 
-                // Try to parse DD/MM/YYYY -> YYYYMMDD for comparison
                 const parseDate = (d) => {
                     const parts = d.split(/[/\-]/);
                     if (parts.length === 3) {
-                        // Assume DD/MM/YY or DD/MM/YYYY. 
-                        // If YY year (e.g. 25), assume 2025
                         let y = parts[2];
                         if (y.length === 2) y = '20' + y;
                         return `${y}${parts[1]}${parts[0]}`;
@@ -649,40 +633,8 @@
                     : valB.localeCompare(valA);
             });
 
-            // 2. Group Data
-            if (groupBy === 'none') {
-                renderRows(tbody, filtered);
-            } else {
-                // Grouping Logic
-                const groups = {};
-                filtered.forEach(item => {
-                    const key = item[groupBy] || 'Unassigned';
-                    if (!groups[key]) groups[key] = [];
-                    groups[key].push(item);
-                });
-
-                // Sort keys alphabetically
-                Object.keys(groups).sort().forEach(groupKey => {
-                    const items = groups[groupKey];
-                    const groupRow = document.createElement('tr');
-                    groupRow.className = 'group-header';
-                    groupRow.innerHTML = `
-                        <td colspan="7" onclick="toggleGroup(this)">
-                            <span class="toggle-icon">▼</span> 
-                            ${formatGroupKey(groupBy, groupKey)} 
-                            <span style="font-weight:400; opacity:0.7; margin-left:10px">(${items.length} records)</span>
-                        </td>
-                    `;
-                    tbody.appendChild(groupRow);
-
-                    // Create a container for rows (using a fragment for performance)
-                    items.forEach((item, index) => {
-                        const tr = createRow(item, index + 1);
-                        tr.setAttribute('data-group', groupKey); // Marker for toggling
-                        tbody.appendChild(tr);
-                    });
-                });
-            }
+            // 3. Render flat list
+            renderRows(tbody, filtered);
         }
 
         function formatGroupKey(type, key) {
