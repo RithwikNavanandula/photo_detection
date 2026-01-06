@@ -497,7 +497,6 @@
                     <tr>
                         <th width="80">Entry Number</th>
                         <th>Timestamp</th>
-                        <th>Branch</th>
                         <th>Batch No</th>
                         <th>Mfg Date</th>
                         <th>Expiry Date</th>
@@ -707,7 +706,7 @@
 
         function renderRows(tbody, items) {
             if (items.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:30px; color:var(--text-muted)">No records found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted)">No records found</td></tr>';
                 return;
             }
             items.forEach((item, index) => {
@@ -720,7 +719,6 @@
             tr.innerHTML = `
                 <td>${index}</td>
                 <td style="color:var(--text-muted); font-size:0.85rem">${item.timestamp || '-'}</td>
-                <td>${item.branch_name || 'Unknown'}</td>
                 <td style="font-family:monospace; color:var(--accent)">${item.batch_no || '-'}</td>
                 <td style="font-size:0.85rem">${item.mfg_date || '-'}</td>
                 <td style="font-size:0.85rem">${item.expiry_date || '-'}</td>

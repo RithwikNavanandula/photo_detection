@@ -995,10 +995,8 @@ def get_pivot_data():
     # Base query
     query = '''
         SELECT s.id, s.timestamp, s.batch_no, s.mfg_date, s.expiry_date, 
-               s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id,
-               s.synced_by, b.name as branch_name
+               s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id, s.synced_by
         FROM scans s
-        LEFT JOIN branches b ON s.branch_id = b.id
     '''
     params = []
     
