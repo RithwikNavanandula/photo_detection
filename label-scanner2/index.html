@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>Label Scanner</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>📷 Label Scanner</h1>
+            <p>Scan product labels instantly</p>
+        </header>
+
+        <!-- Quick Mode Toggle -->
+        <div class="controls">
+            <label class="quick-mode">
+                <input type="checkbox" id="quick-mode">
+                <span>🚀 Quick Mode</span>
+                <small>(ON = skip cropping, faster but less accurate)</small>
+            </label>
+        </div>
+
+        <!-- Upload Button -->
+        <div class="upload-section">
+            <label for="file-input" class="upload-btn">📁 Choose Image</label>
+            <input type="file" id="file-input" accept="image/*" capture="environment">
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p id="loading-text">Processing...</p>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="results hidden">
+            <h2>📋 Results</h2>
+
+            <!-- Photo Preview -->
+            <img id="preview" class="preview" src="" alt="Preview">
+
+            <!-- Data Fields (Editable) -->
+            <div class="field">
+                <label>🔢 Batch No</label>
+                <input type="text" id="batch" placeholder="Not found">
+                <span id="conf-batch" class="badge"></span>
+            </div>
+            <div class="field">
+                <label>📅 Mfg Date</label>
+                <input type="text" id="mfg" placeholder="Not found">
+                <span id="conf-mfg" class="badge"></span>
+            </div>
+            <div class="field">
+                <label>⏰ Expiry Date</label>
+                <input type="text" id="expiry" placeholder="Not found">
+                <span id="conf-expiry" class="badge"></span>
+            </div>
+            <div class="field">
+                <label>🍹 Flavour</label>
+                <input type="text" id="flavour" placeholder="Not found">
+            </div>
+            <div class="field location-field">
+                <label>📍 Godown</label>
+                <input type="text" id="godown" list="godown-list" placeholder="Type or select...">
+                <datalist id="godown-list">
+                    <option value="Godown A">
+                    <option value="Godown B">
+                    <option value="Godown C">
+                    <option value="Warehouse 1">
+                    <option value="Warehouse 2">
+                    <option value="Cold Storage">
+                </datalist>
+            </div>
+
+            <!-- Actions -->
+            <div class="actions">
+                <button id="save-btn" class="btn save">💾 Save</button>
+                <button id="sheets-btn" class="btn sheets">📊 Send to Sheets</button>
+            </div>
+            <div class="actions">
+                <button id="clear-btn" class="btn clear">🔄 New Scan</button>
+            </div>
+
+            <!-- Continuous Mode -->
+            <label class="continuous">
+                <input type="checkbox" id="continuous">
+                <span>⚡ Auto-save & next</span>
+            </label>
+
+            <!-- Raw OCR -->
+            <details class="raw-section">
+                <summary>📝 Raw OCR Text</summary>
+                <pre id="raw-text"></pre>
+            </details>
+        </div>
+
+        <!-- History -->
+        <div class="history-section">
+            <div class="history-header">
+                <h2>📚 History</h2>
+                <button id="export-btn" class="btn export">📥 Export</button>
+            </div>
+            <input type="text" id="search" class="search" placeholder="🔍 Search...">
+            <div id="history-list" class="history-list">
+                <p class="empty">No scans yet</p>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>✂️ Crop Label</h3>
+            <p>Drag box to select label area</p>
+            <div id="crop-container" class="crop-container">
+                <img id="crop-image" src="" alt="Crop">
+                <div id="crop-box" class="crop-box"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="crop-skip" class="btn">❌ Skip</button>
+                <button id="crop-confirm" class="btn save">✅ Crop</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="js/ocr.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

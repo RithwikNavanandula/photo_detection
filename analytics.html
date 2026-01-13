@@ -342,16 +342,12 @@
                     <div class="label">📦 Current Stock</div>
                 </div>
                 <div class="stat-box in">
-                    <div class="value" id="total-in">-</div>
-                    <div class="label">⬇️ Total IN</div>
+                    <div class="value" id="today-in">-</div>
+                    <div class="label">⬇️ Today IN</div>
                 </div>
                 <div class="stat-box out">
-                    <div class="value" id="total-out">-</div>
-                    <div class="label">⬆️ Total OUT</div>
-                </div>
-                <div class="stat-box">
-                    <div class="value" id="total-racks">-</div>
-                    <div class="label">🗄️ Active Racks</div>
+                    <div class="value" id="today-out">-</div>
+                    <div class="label">⬆️ Today OUT</div>
                 </div>
             </div>
 
@@ -421,6 +417,11 @@
 
                     // Update stats
                     document.getElementById('total-stock').textContent = data.stats.current;
+
+                    // Get today's data (first item in daily array is usually today)
+                    const todayData = data.daily && data.daily.length > 0 ? data.daily[0] : { in_count: 0, out_count: 0 };
+                    document.getElementById('today-in').textContent = todayData.in_count || 0;
+                    document.getElementById('today-out').textContent = todayData.out_count || 0;
 
                     // Render charts
                     renderRackChart(data.racks);

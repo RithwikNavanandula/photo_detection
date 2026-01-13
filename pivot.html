@@ -243,16 +243,26 @@
 
         .control-group select,
         .control-group input {
-            background: transparent;
-            border: none;
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 6px 10px;
             color: var(--text);
             font-size: 0.9rem;
             outline: none;
             min-width: 100px;
+            cursor: pointer;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            border-color: var(--accent);
         }
 
         .control-group select option {
-            background: var(--sidebar);
+            background: #2d2d44;
+            color: #ffffff;
+            padding: 8px;
         }
 
         .btn-export {
