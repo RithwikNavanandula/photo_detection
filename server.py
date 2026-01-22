@@ -49,7 +49,8 @@ def superadmin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-DB_PATH = 'users.db'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'users.db')
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -102,6 +103,26 @@ def init_db():
             synced_by TEXT,
             branch_id INTEGER REFERENCES branches(id),
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Create transfer_requests table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transfer_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER,
+            batch_no TEXT,
+            flavour TEXT,
+            expiry_date TEXT,
+            rack_no TEXT,
+            shelf_no TEXT,
+            requested_by INTEGER REFERENCES users(id),
+            requested_by_name TEXT,
+            status TEXT DEFAULT 'pending',
+            notes TEXT,
+            branch_id INTEGER REFERENCES branches(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -846,6 +867,15 @@ def sync_user_scans():
     user = data.get('user', 'Unknown')
     branch_id = data.get('branch_id')  # Get branch from request
     
+    # If branch_id is None (e.g. Super Admin), default to 1 (Main Branch)
+    if not branch_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM branches ORDER BY id LIMIT 1')
+        row = cursor.fetchone()
+        conn.close()
+        branch_id = row[0] if row else 1
+    
     if not scans:
         return jsonify({'success': False, 'error': 'No scans provided'}), 400
     
@@ -889,6 +919,33 @@ def sync_user_scans():
         if cursor.fetchone():
             continue # Skip duplicate
 
+        # Validation for OUT scans: Check if stock exists
+        if scan.get('movement') == 'OUT':
+            cursor.execute('''
+                SELECT movement FROM scans 
+                WHERE batch_no = ? AND flavour = ? 
+                AND mfg_date = ? AND expiry_date = ?
+                AND rack_no = ? AND shelf_no = ?
+            ''', (
+                scan.get('batchNo', ''),
+                scan.get('flavour', ''),
+                scan.get('mfgDate', ''),
+                scan.get('expiryDate', ''),
+                scan.get('rackNo', ''),
+                scan.get('shelfNo', '')
+            ))
+            
+            stock_rows = cursor.fetchall()
+            in_count = sum(1 for r in stock_rows if r['movement'] == 'IN')
+            out_count = sum(1 for r in stock_rows if r['movement'] == 'OUT')
+            
+            if in_count <= out_count:
+                conn.close()
+                return jsonify({
+                    'success': False, 
+                    'error': f"Stock Error: No available stock found for Batch {scan.get('batchNo')} ({scan.get('flavour')}) at this location."
+                }), 400
+
         cursor.execute('''
             INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -905,6 +962,24 @@ def sync_user_scans():
             branch_id
         ))
         synced += 1
+        
+        # Check if this is an OUT scan matching a transfer request
+        if scan.get('movement') == 'OUT':
+            # Find matching submitted request
+            cursor.execute('''
+                SELECT id FROM transfer_requests 
+                WHERE batch_no = ? AND flavour = ? AND rack_no = ? AND shelf_no = ? AND status = 'submitted'
+            ''', (
+                scan.get('batchNo', ''),
+                scan.get('flavour', ''),
+                scan.get('rackNo', ''),
+                scan.get('shelfNo', '')
+            ))
+            
+            req = cursor.fetchone()
+            if req:
+                # Mark as completed
+                cursor.execute('UPDATE transfer_requests SET status = "completed", updated_at = CURRENT_TIMESTAMP WHERE id = ?', (req['id'],))
     
     conn.commit()
     conn.close()
@@ -1228,9 +1303,16 @@ def get_pivot_data():
     query = '''
         SELECT s.id, s.timestamp, s.batch_no, s.mfg_date, s.expiry_date, 
                s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id, 
-               s.synced_by, b.name as branch_name
+               s.synced_by, b.name as branch_name,
+               tr.requested_by_name
         FROM scans s
         LEFT JOIN branches b ON s.branch_id = b.id
+        LEFT JOIN transfer_requests tr ON 
+            tr.batch_no = s.batch_no AND 
+            tr.flavour = s.flavour AND 
+            tr.rack_no = s.rack_no AND 
+            tr.shelf_no = s.shelf_no AND
+            s.movement = 'OUT'
     '''
     params = []
     
@@ -1245,6 +1327,290 @@ def get_pivot_data():
     conn.close()
     
     return jsonify({'success': True, 'scans': scans})
+
+# --- Transfer Request API ---
+
+@app.route('/transfer')
+def serve_transfer():
+    return send_from_directory('.', 'transfer.html')
+
+@app.route('/transfer-reports')
+def serve_transfer_reports():
+    return send_from_directory('.', 'transfer-reports.html')
+
+@app.route('/api/transfer/flavors', methods=['GET'])
+@login_required
+def get_transfer_flavors():
+    """Get list of available flavors"""
+    branch_id = session.get('branch_id')
+    # If admin/superadmin wants to see all, they can, but for transfer request usually it's within a branch
+    # or requesting FROM a branch. Let's assume user requests items avaiable in THEIR branch (or globally?)
+    # User said "request for a flavor". Usually you request something you don't have, or you request to move something.
+    # Let's assume we list ALL flavors available in the system or current branch. 
+    # Let's use current branch or all if params say so.
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Just get all distinct flavors for now
+    cursor.execute("SELECT DISTINCT flavour FROM scans WHERE flavour IS NOT NULL AND flavour != '' ORDER BY flavour")
+    flavors = [row['flavour'] for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'flavors': flavors})
+
+@app.route('/api/transfer/nearest-expiry', methods=['GET'])
+@login_required
+def get_nearest_expiry():
+    """Get nearest expiring batch for selected flavor"""
+    flavor = request.args.get('flavor')
+    branch_id = request.args.get('branch_id', type=int) # Optional, if we want to limit to specific branch
+    
+    if not flavor:
+        return jsonify({'success': False, 'error': 'Flavor is required'})
+
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT batch_no, expiry_date, mfg_date, rack_no, shelf_no, branch_id
+        FROM scans 
+        WHERE flavour = ? AND movement = 'IN' 
+        AND expiry_date IS NOT NULL AND expiry_date != ''
+    '''
+    params = [flavor]
+    
+    if branch_id:
+        query += ' AND branch_id = ?'
+        params.append(branch_id)
+        
+    # We want the nearest (earliest) expiry date that is presumably 'future' or 'recent'
+    # Actually just ORDER BY expiry_date ASC gives us the oldest/nearest expiry
+    # We might want to filter out expired items? Maybe not, maybe we want to move them to dispose.
+    # User just said "nearest expiry date batch".
+    # Note: Using simple string comparison for dates YYYY-MM-DD works, but if format is DD-MM-YYYY it might fail.
+    # Our data seems to be DD/MM/YYYY or similar. We should try to parse or just trust the DB sort if consistent.
+    # The previous code had complex date parsing. 
+    # For now, let's fetch all IN items for this flavor, parse dates in python, sort, and pick first.
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    if not rows:
+        return jsonify({'success': False, 'message': 'No stock found for this flavor'})
+
+    items = []
+    from datetime import datetime
+    today = datetime.now().date()
+    
+    for row in rows:
+        expiry_str = row['expiry_date']
+        try:
+            # Try parsing multiple formats
+            expiry_date = None
+            for fmt in ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%m/%d/%y']:
+                try:
+                    expiry_date = datetime.strptime(expiry_str, fmt).date()
+                    break
+                except:
+                    continue
+            
+            if expiry_date:
+                items.append({
+                    'batch_no': row['batch_no'],
+                    'expiry_date': row['expiry_date'], # Keep original string
+                    'expiry_dt': expiry_date, # For sorting
+                    'mfg_date': row['mfg_date'],
+                    'rack_no': row['rack_no'],
+                    'shelf_no': row['shelf_no'],
+                    'branch_id': row['branch_id']
+                })
+        except:
+            continue
+            
+    if not items:
+         return jsonify({'success': False, 'message': 'No valid expiry dates found'})
+
+    # Sort by expiry date ASC
+    items.sort(key=lambda x: x['expiry_dt'])
+    
+    # Pick the first one (nearest expiry)
+    best_item = items[0]
+    
+    # Remove expiry_dt object before returning
+    del best_item['expiry_dt']
+    
+    return jsonify({'success': True, 'item': best_item})
+
+@app.route('/api/transfer/batches', methods=['GET'])
+@login_required
+def get_transfer_batches():
+    """Get all batches for selected flavor, sorted by expiry"""
+    flavor = request.args.get('flavor')
+    branch_id = request.args.get('branch_id', type=int)
+    
+    if not flavor:
+        return jsonify({'success': False, 'error': 'Flavor is required'})
+
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT batch_no, expiry_date, mfg_date, rack_no, shelf_no, branch_id
+        FROM scans 
+        WHERE flavour = ? AND movement = 'IN' 
+        AND expiry_date IS NOT NULL AND expiry_date != ''
+    '''
+    params = [flavor]
+    
+    if branch_id:
+        query += ' AND branch_id = ?'
+        params.append(branch_id)
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    if not rows:
+        return jsonify({'success': False, 'items': []})
+
+    items = []
+    from datetime import datetime
+    
+    for row in rows:
+        expiry_str = row['expiry_date']
+        try:
+            # Try parsing multiple formats
+            expiry_date = None
+            for fmt in ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%m/%d/%y']:
+                try:
+                    expiry_date = datetime.strptime(expiry_str, fmt).date()
+                    break
+                except:
+                    continue
+            
+            # If date parse failed, use a far future or past date? Or just exclude?
+            # Let's include it but sort it last if unknown
+            if not expiry_date:
+                 expiry_date = datetime.max.date()
+
+            items.append({
+                'batch_no': row['batch_no'],
+                'expiry_date': row['expiry_date'],
+                'expiry_dt': expiry_date,
+                'mfg_date': row['mfg_date'],
+                'rack_no': row['rack_no'],
+                'shelf_no': row['shelf_no'],
+                'branch_id': row['branch_id']
+            })
+        except:
+             continue
+            
+    # Sort by expiry date ASC
+    items.sort(key=lambda x: x['expiry_dt'])
+    
+    # Cleanup helper key
+    for item in items:
+        del item['expiry_dt']
+    
+    return jsonify({'success': True, 'items': items})
+
+@app.route('/api/transfer/request', methods=['POST'])
+@login_required
+def create_transfer_request():
+    """Submit a new transfer request"""
+    data = request.get_json()
+    
+    flavour = data.get('flavour')
+    batch_no = data.get('batch_no')
+    expiry_date = data.get('expiry_date')
+    rack_no = data.get('rack_no')
+    shelf_no = data.get('shelf_no')
+    notes = data.get('notes', '')
+    
+    if not flavour or not batch_no:
+        return jsonify({'success': False, 'error': 'Flavor and Batch No are required'})
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    user_id = session.get('user_id')
+    
+    # Get user name
+    cursor.execute('SELECT username FROM users WHERE id = ?', (user_id,))
+    user_row = cursor.fetchone()
+    username = user_row['username'] if user_row else 'Unknown'
+    
+    # Get user's branch
+    cursor.execute('SELECT branch_id FROM users WHERE id = ?', (user_id,))
+    branch_row = cursor.fetchone()
+    branch_id = branch_row['branch_id'] if branch_row else None
+
+    cursor.execute('''
+        INSERT INTO transfer_requests 
+        (flavour, batch_no, expiry_date, rack_no, shelf_no, requested_by, requested_by_name, notes, branch_id, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')
+    ''', (flavour, batch_no, expiry_date, rack_no, shelf_no, user_id, username, notes, branch_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'message': 'Transfer request submitted successfully'})
+
+@app.route('/api/transfer/requests', methods=['GET'])
+@login_required
+def get_transfer_requests():
+    """Get all transfer requests"""
+    # Filters
+    status = request.args.get('status')
+    
+    query = 'SELECT * FROM transfer_requests'
+    params = []
+    
+    where_clauses = []
+    if status:
+        where_clauses.append('status = ?')
+        params.append(status)
+        
+    # If user is not admin, distinct logic? 
+    # Plan says "when any other person opens the report should be able to show who requested it".
+    # So assuming all users can see reports for transparency.
+    
+    if where_clauses:
+        query += ' WHERE ' + ' AND '.join(where_clauses)
+        
+    query += ' ORDER BY created_at DESC'
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    requests = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'requests': requests})
+
+@app.route('/api/transfer/update-status', methods=['POST'])
+@admin_required
+def update_transfer_status():
+    """Update status of a transfer request (Admin only)"""
+    data = request.get_json()
+    request_id = data.get('id')
+    new_status = data.get('status')
+    
+    if not request_id or not new_status:
+        return jsonify({'success': False, 'error': 'ID and status required'})
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('UPDATE transfer_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
+                   (new_status, request_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     init_db()

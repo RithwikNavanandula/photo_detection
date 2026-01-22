@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transfer Request - Label Scanner</title>
+    <style>
+        :root {
+            --bg: #1e1e2e;
+            --card: #2d2d44;
+            --accent: #6c63ff;
+            --accent2: #4a4a6a;
+            --text: #ffffff;
+            --text2: #a0a0b0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --sidebar: #2d2d44;
+            --input-bg: #1e1e2e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg) 0%, #0f0f23 100%);
+            min-height: 100vh;
+            color: var(--text);
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 220px;
+            min-height: 100vh;
+            background: #2d2d44;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 12px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #6c63ff;
+            padding: 12px 8px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #a0a0b0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+        }
+
+        .sidebar-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        .sidebar-btn.active {
+            background: #6c63ff;
+            color: #ffffff;
+        }
+
+        .sidebar-btn.danger {
+            color: #ef4444;
+        }
+
+        .sidebar-btn.danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 12px 0;
+        }
+
+        .sidebar-section {
+            font-size: 0.7rem;
+            color: #a0a0b0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 14px;
+            margin-top: 8px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 220px;
+            padding: 40px;
+            max-width: calc(100% - 220px);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            margin-bottom: 25px;
+            color: var(--accent);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text2);
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            background: var(--input-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .details-box {
+            background: rgba(108, 99, 255, 0.1);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            display: none;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .detail-item strong {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text2);
+        }
+
+        .detail-item span {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 15px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .btn-submit:hover {
+            background: #5b54d6;
+        }
+
+        .btn-submit:disabled {
+            background: var(--accent2);
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+
+        .message.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .message.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+            border: 1px solid var(--error);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-logo">🛠️ Admin Panel</div>
+
+        <div class="sidebar-section">Navigation</div>
+        <button class="sidebar-btn" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
+        <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+        <button class="sidebar-btn active" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
+                Reports</span></button>
+        <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
+        <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
+            <span>Branches</span></button>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Actions</div>
+        <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+        <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+        <button class="sidebar-btn" onclick="document.getElementById('csv-upload').click()">📤 <span>Upload
+                CSV</span></button>
+        <button class="sidebar-btn" onclick="downloadReport()">📥 <span>Export</span></button>
+
+        <div style="flex:1;"></div>
+        <div class="sidebar-divider"></div>
+        <button class="sidebar-btn danger" onclick="logout()">🚪 <span>Logout</span></button>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="container">
+            <div class="card">
+                <h1>Request Stock Transfer</h1>
+
+                <div class="form-group">
+                    <label>Select Flavor</label>
+                    <select id="flavor-select" class="form-control" onchange="loadBatches()">
+                        <option value="">-- Select Flavor --</option>
+                        <option value="" disabled>Loading flavors...</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="batch-group" style="display:none;">
+                    <label>Select Batch (Sorted by Expiry)</label>
+                    <select id="batch-select" class="form-control" onchange="displayBatchDetails()">
+                        <option value="">-- Select Batch --</option>
+                    </select>
+                </div>
+
+                <div id="details-box" class="details-box">
+                    <h3 style="margin-bottom:10px;color:var(--accent)">Nearest Expiry Batch Found</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <strong>Batch Number</strong>
+                            <span id="batch-no">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Expiry Date</strong>
+                            <span id="expiry-date" style="color:#ef4444">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Rack</strong>
+                            <span id="rack-no">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Shelf</strong>
+                            <span id="shelf-no">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="no-stock-msg" style="display:none;color:var(--text2);margin-bottom:20px;text-align:center;">
+                    No stock available for this flavor.
+                </div>
+
+                <div class="form-group">
+                    <label>Notes (Optional)</label>
+                    <textarea id="notes" class="form-control"
+                        placeholder="Reason for transfer, priority, etc."></textarea>
+                </div>
+
+                <button id="submit-btn" class="btn-submit" onclick="submitRequest()" disabled>Submit Transfer
+                    Request</button>
+
+                <div id="message" class="message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check authentication
+        fetch('/api/check-auth')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.authenticated) window.location.href = '/';
+
+                if (data.role === 'superadmin') {
+                    const btnBranches = document.getElementById('btn-branches');
+                    if (btnBranches) btnBranches.style.display = 'flex';
+                }
+            });
+
+        // Load flavors on init
+        loadFlavors();
+
+        async function loadFlavors() {
+            try {
+                const response = await fetch('/api/transfer/flavors');
+                const data = await response.json();
+
+                const select = document.getElementById('flavor-select');
+                select.innerHTML = '<option value="">-- Select Flavor --</option>';
+
+                if (data.success && data.flavors) {
+                    data.flavors.forEach(flavor => {
+                        const option = document.createElement('option');
+                        option.value = flavor;
+                        option.textContent = flavor;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load flavors:', err);
+            }
+        }
+
+        let currentBatches = [];
+
+        async function loadBatches() {
+            const flavor = document.getElementById('flavor-select').value;
+            const batchSelect = document.getElementById('batch-select');
+            const batchGroup = document.getElementById('batch-group');
+            const detailsBox = document.getElementById('details-box');
+            const noStockMsg = document.getElementById('no-stock-msg');
+            const submitBtn = document.getElementById('submit-btn');
+
+            // Reset
+            batchSelect.innerHTML = '<option value="">-- Select Batch --</option>';
+            detailsBox.style.display = 'none';
+            noStockMsg.style.display = 'none';
+            submitBtn.disabled = true;
+            currentBatches = [];
+
+            if (!flavor) {
+                batchGroup.style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/transfer/batches?flavor=${encodeURIComponent(flavor)}`);
+                const data = await response.json();
+
+                if (data.success && data.items && data.items.length > 0) {
+                    currentBatches = data.items;
+                    batchGroup.style.display = 'block';
+
+                    data.items.forEach((item, index) => {
+                        const option = document.createElement('option');
+                        option.value = index; // Store index to retrieve object later
+                        // Format: BatchNo (Exp: Date)
+                        option.textContent = `${item.batch_no} (Exp: ${item.expiry_date}) ${index === 0 ? '⭐ Nearest' : ''}`;
+                        batchSelect.appendChild(option);
+                    });
+
+                    // Auto-select first (nearest)
+                    batchSelect.value = "0";
+                    displayBatchDetails();
+
+                } else {
+                    batchGroup.style.display = 'none';
+                    noStockMsg.style.display = 'block';
+                    noStockMsg.textContent = 'No stock available for this flavor.';
+                }
+            } catch (err) {
+                console.error('Failed to load batches:', err);
+                noStockMsg.textContent = 'Error loading stock data.';
+                noStockMsg.style.display = 'block';
+            }
+        }
+
+        function displayBatchDetails() {
+            const index = document.getElementById('batch-select').value;
+            const detailsBox = document.getElementById('details-box');
+            const submitBtn = document.getElementById('submit-btn');
+
+            if (index === "" || !currentBatches[index]) {
+                detailsBox.style.display = 'none';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            const item = currentBatches[index];
+
+            document.getElementById('batch-no').textContent = item.batch_no;
+            document.getElementById('expiry-date').textContent = item.expiry_date;
+            document.getElementById('rack-no').textContent = item.rack_no;
+            document.getElementById('shelf-no').textContent = item.shelf_no;
+
+            detailsBox.style.display = 'block';
+            submitBtn.disabled = false;
+        }
+
+        async function submitRequest() {
+            const index = document.getElementById('batch-select').value;
+            if (index === "" || !currentBatches[index]) return;
+
+            const batch = currentBatches[index];
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            const notes = document.getElementById('notes').value;
+            const flavor = document.getElementById('flavor-select').value;
+
+            try {
+                const response = await fetch('/api/transfer/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        flavour: flavor, // API expects flavour
+                        batch_no: batch.batch_no,
+                        expiry_date: batch.expiry_date,
+                        rack_no: batch.rack_no,
+                        shelf_no: batch.shelf_no,
+                        notes: notes
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage('success', 'Transfer request submitted successfully!');
+                    // Reset form after 2 seconds
+                    setTimeout(() => {
+                        document.getElementById('flavor-select').value = '';
+                        document.getElementById('notes').value = '';
+                        document.getElementById('details-box').style.display = 'none';
+                        submitBtn.textContent = 'Submit Transfer Request';
+                        hideMessage();
+                    }, 2000);
+                } else {
+                    showMessage('error', result.error || 'Failed to submit request');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Transfer Request';
+                }
+            } catch (err) {
+                showMessage('error', 'Network error. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Transfer Request';
+            }
+        }
+
+        function showMessage(type, text) {
+            const msg = document.getElementById('message');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            msg.style.display = 'block';
+        }
+
+        function hideMessage() {
+            document.getElementById('message').style.display = 'none';
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' })
+                .then(() => window.location.href = '/');
+        }
+    </script>
+</body>
+
+</html>

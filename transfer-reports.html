@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transfer Reports - Label Scanner</title>
+    <style>
+        :root {
+            --bg: #1e1e2e;
+            --card: #2d2d44;
+            --accent: #6c63ff;
+            --accent2: #4a4a6a;
+            --text: #ffffff;
+            --text2: #a0a0b0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --sidebar: #2d2d44;
+            --input-bg: #1e1e2e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg) 0%, #0f0f23 100%);
+            min-height: 100vh;
+            color: var(--text);
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 220px;
+            min-height: 100vh;
+            background: #2d2d44;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 12px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #6c63ff;
+            padding: 12px 8px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #a0a0b0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+        }
+
+        .sidebar-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        .sidebar-btn.active {
+            background: #6c63ff;
+            color: #ffffff;
+        }
+
+        .sidebar-btn.danger {
+            color: #ef4444;
+        }
+
+        .sidebar-btn.danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 12px 0;
+        }
+
+        .sidebar-section {
+            font-size: 0.7rem;
+            color: #a0a0b0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 14px;
+            margin-top: 8px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 220px;
+            padding: 40px;
+            max-width: calc(100% - 220px);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+
+        select.filter-select {
+            padding: 8px 12px;
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: var(--text);
+            outline: none;
+        }
+
+        .table-container {
+            background: var(--card);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text2);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        td {
+            color: var(--text);
+            font-size: 0.95rem;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-badge.submitted {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+        }
+
+        .status-badge.pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .status-badge.approved {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+
+        .status-badge.completed {
+            background: rgba(108, 99, 255, 0.2);
+            color: var(--accent);
+        }
+
+        .status-badge.rejected {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+        }
+
+        .action-btn {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: transparent;
+            color: var(--text2);
+            cursor: pointer;
+            margin-right: 5px;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+        }
+
+        .action-btn.approve:hover {
+            color: var(--success);
+            border-color: var(--success);
+        }
+
+        .action-btn.reject:hover {
+            color: var(--error);
+            border-color: var(--error);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-logo">🛠️ Admin Panel</div>
+
+        <div class="sidebar-section">Navigation</div>
+        <button class="sidebar-btn" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
+        <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn active" onclick="location.href='/transfer-reports'">📋 <span>Transfer
+                Reports</span></button>
+        <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
+        <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
+            <span>Branches</span></button>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Actions</div>
+        <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+        <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+        <button class="sidebar-btn" onclick="document.getElementById('csv-upload').click()">📤 <span>Upload
+                CSV</span></button>
+        <button class="sidebar-btn" onclick="downloadReport()">📥 <span>Export</span></button>
+
+        <div style="flex:1;"></div>
+        <div class="sidebar-divider"></div>
+        <button class="sidebar-btn danger" onclick="logout()">🚪 <span>Logout</span></button>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1>Transfer Requests Report</h1>
+                <div class="controls">
+                    <select id="status-filter" class="filter-select" onchange="loadRequests()">
+                        <option value="">All Statuses</option>
+                        <option value="submitted">Request Submitted</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                    <button class="action-btn" onclick="loadRequests()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table id="requests-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Info</th>
+                            <th>Location</th>
+                            <th>Requested By</th>
+                            <th>Requested At</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr>
+                            <td colspan="6" style="text-align:center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isAdmin = false;
+
+        // Check authentication & role
+        fetch('/api/check-auth')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.authenticated) window.location.href = '/';
+                isAdmin = ['admin', 'superadmin'].includes(data.role);
+
+                if (data.role === 'superadmin') {
+                    const btnBranches = document.getElementById('btn-branches');
+                    if (btnBranches) btnBranches.style.display = 'flex';
+                }
+            });
+
+        // Load data immediately when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Reset filter to All on load
+            const filter = document.getElementById('status-filter');
+            if (filter) {
+                filter.value = "";
+                // Trigger load
+                loadRequests();
+            }
+        });
+
+        async function loadRequests() {
+            const status = document.getElementById('status-filter').value;
+            const tbody = document.getElementById('table-body');
+
+            try {
+                let url = '/api/transfer/requests';
+                // Add cache buster
+                const timestamp = new Date().getTime();
+                if (status) {
+                    url += `?status=${status}&_t=${timestamp}`;
+                } else {
+                    url += `?_t=${timestamp}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success && data.requests) {
+                    if (data.requests.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text2)">No transfer requests found</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = data.requests.map(req => {
+                        const date = new Date(req.created_at).toLocaleString();
+
+                        return `
+                            <tr>
+                                <td>#${req.id}</td>
+                                <td>
+                                    <div style="font-weight:600;color:var(--accent)">${req.flavour}</div>
+                                    <div style="font-size:0.8rem;color:var(--text2)">Batch: ${req.batch_no}</div>
+                                    <div style="font-size:0.8rem;color:#ef4444">Exp: ${req.expiry_date}</div>
+                                </td>
+                                <td>
+                                    <div>Rack: ${req.rack_no}</div>
+                                    <div>Shelf: ${req.shelf_no}</div>
+                                </td>
+                                <td>
+                                    <div>${req.requested_by_name}</div>
+                                    ${req.notes ? `<div style="font-size:0.8rem;color:var(--text2);font-style:italic">"${req.notes}"</div>` : ''}
+                                </td>
+                                <td style="font-size:0.85rem">${date}</td>
+                                <td>
+                                    <span class="status-badge ${req.status}">${req.status === 'submitted' ? 'Request Submitted' : req.status}</span>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--error)">Failed to load requests</td></tr>';
+                }
+            } catch (err) {
+                console.error('Failed to load requests:', err);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--error)">Network error</td></tr>';
+            }
+        }
+
+        async function updateStatus(id, newStatus) {
+            if (!confirm(`Are you sure you want to mark request #${id} as ${newStatus}?`)) return;
+
+            try {
+                const response = await fetch('/api/transfer/update-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, status: newStatus })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    loadRequests(); // Refresh table
+                } else {
+                    alert('Failed to update status: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' })
+                .then(() => window.location.href = '/');
+        }
+    </script>
+</body>
+
+</html>

@@ -422,6 +422,9 @@
         <button class="sidebar-btn" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
         <button class="sidebar-btn active" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
         <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
+                Reports</span></button>
         <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
         <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
             <span>Branches</span></button>
@@ -502,6 +505,7 @@
                         <th>Shelf</th>
                         <th>Movement</th>
                         <th>Synced By</th>
+                        <th>Requested By</th>
                     </tr>
                 </thead>
                 <tbody id="matrix-body">
@@ -712,6 +716,7 @@
                 <td>${item.shelf_no || '-'}</td>
                 <td><span class="badge ${(item.movement || 'in').toLowerCase()}">${item.movement || 'IN'}</span></td>
                 <td style="font-size:0.85rem">${item.synced_by || '-'}</td>
+                <td style="font-size:0.85rem; color:var(--accent)">${item.requested_by_name || '-'}</td>
             `;
             return tr;
         }

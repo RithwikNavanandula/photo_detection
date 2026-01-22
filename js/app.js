@@ -403,7 +403,14 @@ const App = {
                 await this.loadHistory();
                 this.clear();
             } else {
-                // If server fails, save locally only
+                // Check for stock validation error
+                if (result.error && result.error.includes('Stock Error')) {
+                    this.toast('❌ ' + result.error);
+                    // Do NOT save locally, do NOT clear form
+                    return;
+                }
+
+                // If other server fails (e.g. 500), save locally
                 await Storage.save(this.currentScan);
                 this.toast('⚠️ Saved locally (DB sync failed)');
                 await this.loadHistory();
