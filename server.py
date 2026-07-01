@@ -11,6 +11,11 @@ import os
 import csv
 import io
 import requests
+import random
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from functools import wraps
 from datetime import datetime
 from flask import Response
@@ -18,6 +23,13 @@ from flask import Response
 app = Flask(__name__, static_folder='.')
 app.secret_key = 'label-scanner-secret-key-2026'  # Fixed key for session persistence
 CORS(app)
+
+# --- Gmail OTP Config ---
+GMAIL_SENDER = 'navarithwik@gmail.com'
+GMAIL_APP_PASSWORD = 'lmkrsrkvisaxpypm'  # App password (spaces removed)
+
+# In-memory OTP store: {username: {otp, expires, attempts}}
+otp_store = {}
 
 # --- Authentication Decorators ---
 
@@ -75,7 +87,7 @@ def init_db():
         )
     ''')
     
-    # Create users table with branch_id
+    # Create users table with branch_id and email
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,7 +96,8 @@ def init_db():
             name TEXT NOT NULL,
             role TEXT DEFAULT 'user',
             branch_id INTEGER REFERENCES branches(id),
-            active INTEGER DEFAULT 1
+            active INTEGER DEFAULT 1,
+            email TEXT
         )
     ''')
     
@@ -126,19 +139,26 @@ def init_db():
         )
     ''')
     
-    # Migration: Add branch_id columns if they don't exist
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN branch_id INTEGER')
-    except:
-        pass
-    try:
-        cursor.execute('ALTER TABLE scans ADD COLUMN branch_id INTEGER')
-    except:
-        pass
-    try:
-        cursor.execute('ALTER TABLE scans ADD COLUMN synced_by TEXT')
-    except:
-        pass
+    # Migration: Add columns if they don't exist
+    for migration in [
+        'ALTER TABLE users ADD COLUMN branch_id INTEGER',
+        'ALTER TABLE users ADD COLUMN email TEXT',
+        'ALTER TABLE scans ADD COLUMN branch_id INTEGER',
+        'ALTER TABLE scans ADD COLUMN synced_by TEXT',
+    ]:
+        try:
+            cursor.execute(migration)
+        except:
+            pass
+
+    # Set temp emails for existing users who have none
+    cursor.execute("SELECT id, username FROM users WHERE email IS NULL OR email = ''")
+    users_no_email = cursor.fetchall()
+    for u in users_no_email:
+        temp_email = f"{u['username']}@temp.labelscan.local"
+        cursor.execute("UPDATE users SET email = ? WHERE id = ?", (temp_email, u['id']))
+    if users_no_email:
+        print(f'Assigned temp emails to {len(users_no_email)} user(s) with no email.')
     
     # Create default branch if none exists
     cursor.execute('SELECT COUNT(*) FROM branches')
@@ -154,20 +174,16 @@ def init_db():
     # Check if users exist
     cursor.execute('SELECT COUNT(*) FROM users')
     if cursor.fetchone()[0] == 0:
-        # Add default users with branch
         users = [
-            ('superadmin', hash_password('super123'), 'Super Admin', 'superadmin', None),  # No branch - sees all
-            ('admin', hash_password('admin123'), 'Administrator', 'admin', default_branch_id),
-            ('user1', hash_password('user123'), 'User One', 'user', default_branch_id)
+            ('superadmin', hash_password('super123'), 'Super Admin', 'superadmin', None, 'superadmin@temp.labelscan.local'),
+            ('admin', hash_password('admin123'), 'Administrator', 'admin', default_branch_id, 'admin@temp.labelscan.local'),
+            ('user1', hash_password('user123'), 'User One', 'user', default_branch_id, 'user1@temp.labelscan.local')
         ]
         cursor.executemany(
-            'INSERT INTO users (username, password, name, role, branch_id) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO users (username, password, name, role, branch_id, email) VALUES (?, ?, ?, ?, ?, ?)',
             users
         )
-        print('Default users created:')
-        print('  superadmin / super123 (all branches)')
-        print('  admin / admin123 (Main Branch)')
-        print('  user1 / user123 (Main Branch)')
+        print('Default users created: superadmin / admin / user1')
     
     # Upgrade existing admin to superadmin if no superadmin exists
     cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'superadmin'")
@@ -233,17 +249,237 @@ def logout():
     session.clear()
     return jsonify({'success': True})
 
+# --- OTP / MFA Helpers ---
+
+def send_otp_email(to_email, otp, username):
+    """Send OTP via Gmail SMTP"""
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'Your Label Scanner Login OTP'
+        msg['From'] = GMAIL_SENDER
+        msg['To'] = to_email
+
+        html = f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:auto;background:#1e1e2e;color:#fff;border-radius:12px;padding:32px;">
+          <h2 style="color:#6c63ff;margin-bottom:8px;">📷 Label Scanner</h2>
+          <p style="color:#a0a0b0;">Hi <strong>{username}</strong>, your one-time login code is:</p>
+          <div style="font-size:2.5rem;font-weight:700;letter-spacing:8px;color:#6c63ff;text-align:center;margin:24px 0;background:rgba(108,99,255,0.1);border-radius:8px;padding:16px;">
+            {otp}
+          </div>
+          <p style="color:#a0a0b0;font-size:0.85rem;">This code expires in <strong>5 minutes</strong>. Do not share it with anyone.</p>
+        </div>
+        """
+        msg.attach(MIMEText(html, 'html'))
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(GMAIL_SENDER, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_SENDER, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f'[OTP Email Error]: {e}')
+        return False
+
+
+@app.route('/api/get-login-method', methods=['POST'])
+def get_login_method():
+    """Returns the allowed login methods and masked email for a username"""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    if not username:
+        return jsonify({'success': False, 'error': 'Username required'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT role, email, active FROM users WHERE username = ?', (username,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if user['active'] == 0:
+        return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
+
+    role = user['role']
+    email = user['email'] or ''
+    # Mask email: na***ik@gmail.com
+    if email and '@' in email:
+        local, domain = email.split('@', 1)
+        masked = local[:2] + '***' + local[-2:] + '@' + domain if len(local) > 4 else '***@' + domain
+    else:
+        masked = None
+
+    return jsonify({
+        'success': True,
+        'role': role,
+        'has_email': bool(email and '@' not in email.split('@')[1].split('.')[0] == '' or email),
+        'masked_email': masked,
+        'allow_password': role in ('admin', 'superadmin'),
+        'allow_otp': bool(email and '@' in email)
+    })
+
+
+@app.route('/api/send-otp', methods=['POST'])
+def send_otp():
+    """Generate and email a 6-digit OTP"""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    if not username:
+        return jsonify({'success': False, 'error': 'Username required'}), 400
+
+    # Rate limit: 1 OTP per 60s
+    existing = otp_store.get(username)
+    if existing and time.time() - existing.get('sent_at', 0) < 60:
+        wait = int(60 - (time.time() - existing['sent_at']))
+        return jsonify({'success': False, 'error': f'Please wait {wait}s before requesting another OTP'}), 429
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT username, name, email, active FROM users WHERE username = ?', (username,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+    if user['active'] == 0:
+        return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
+    if not user['email'] or '@' not in user['email']:
+        return jsonify({'success': False, 'error': 'No email on file. Contact your admin.'}), 400
+
+    otp = str(random.randint(100000, 999999))
+    otp_store[username] = {
+        'otp': otp,
+        'expires': time.time() + 300,  # 5 minutes
+        'sent_at': time.time(),
+        'attempts': 0
+    }
+
+    sent = send_otp_email(user['email'], otp, user['name'] or username)
+    if not sent:
+        del otp_store[username]
+        return jsonify({'success': False, 'error': 'Failed to send email. Try again later.'}), 500
+
+    # Return masked email
+    email = user['email']
+    local, domain = email.split('@', 1)
+    masked = local[:2] + '***' + local[-2:] + '@' + domain if len(local) > 4 else '***@' + domain
+    return jsonify({'success': True, 'message': f'OTP sent to {masked}'})
+
+
+@app.route('/api/verify-otp', methods=['POST'])
+def verify_otp():
+    """Verify OTP and log in the user"""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    otp_input = data.get('otp', '').strip()
+
+    if not username or not otp_input:
+        return jsonify({'success': False, 'error': 'Username and OTP required'}), 400
+
+    record = otp_store.get(username)
+    if not record:
+        return jsonify({'success': False, 'error': 'No OTP found. Please request a new one.'}), 400
+
+    if time.time() > record['expires']:
+        del otp_store[username]
+        return jsonify({'success': False, 'error': 'OTP has expired. Please request a new one.'}), 400
+
+    record['attempts'] = record.get('attempts', 0) + 1
+    if record['attempts'] > 5:
+        del otp_store[username]
+        return jsonify({'success': False, 'error': 'Too many attempts. Please request a new OTP.'}), 400
+
+    if otp_input != record['otp']:
+        return jsonify({'success': False, 'error': f'Incorrect OTP. {5 - record["attempts"]} attempts left.'}), 401
+
+    # OTP correct — clear store and log in
+    del otp_store[username]
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name, b.code as branch_code
+        FROM users u
+        LEFT JOIN branches b ON u.branch_id = b.id
+        WHERE u.username = ? AND u.active = 1
+    ''', (username,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found or inactive'}), 401
+
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['role'] = user['role']
+    session['branch_id'] = user['branch_id']
+    session.permanent = True
+
+    return jsonify({
+        'success': True,
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'name': user['name'],
+            'role': user['role'],
+            'branch_id': user['branch_id'],
+            'branch_name': user['branch_name'] or 'All Branches',
+            'branch_code': user['branch_code'] or 'ALL'
+        }
+    })
+
+
+@app.route('/api/admin/users/update-email', methods=['POST'])
+@superadmin_required
+def update_user_email():
+    """Superadmin: update any user's email address"""
+    data = request.get_json()
+    user_id = data.get('id')
+    new_email = data.get('email', '').strip().lower()
+
+    if not user_id:
+        return jsonify({'success': False, 'error': 'User ID required'}), 400
+    if not new_email or '@' not in new_email:
+        return jsonify({'success': False, 'error': 'Valid email required'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET email = ? WHERE id = ?', (new_email, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/check-auth', methods=['GET'])
+def check_auth():
+    """Lightweight auth status endpoint for frontend guards."""
+    if 'user_id' not in session:
+        return jsonify({'authenticated': False})
+
+    return jsonify({
+        'authenticated': True,
+        'user_id': session.get('user_id'),
+        'username': session.get('username'),
+        'role': session.get('role'),
+        'branch_id': session.get('branch_id')
+    })
+
 @app.route('/api/register', methods=['POST'])
 def register():
     """Register a new user"""
     data = request.get_json()
     username = data.get('username', '').strip()
     password = data.get('password', '')
+    email = data.get('email', '').strip().lower()
     role = data.get('role', 'user')
     branch_id = data.get('branch_id')
     
     if not username or not password:
         return jsonify({'success': False, 'error': 'Username and password required'}), 400
+    
+    if not email or '@' not in email:
+        return jsonify({'success': False, 'error': 'A valid email address is required'}), 400
     
     if len(username) < 3:
         return jsonify({'success': False, 'error': 'Username must be at least 3 characters'}), 400
@@ -254,31 +490,27 @@ def register():
     if not branch_id:
         return jsonify({'success': False, 'error': 'Please select a branch'}), 400
     
-    # Only allow 'user' or 'admin' roles for registration
     if role not in ['user', 'admin']:
         role = 'user'
     
     conn = get_db()
     cursor = conn.cursor()
     
-    # Check if username exists
     cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
     if cursor.fetchone():
         conn.close()
         return jsonify({'success': False, 'error': 'Username already taken'}), 400
     
-    # Verify branch exists
     cursor.execute('SELECT id FROM branches WHERE id = ?', (branch_id,))
     if not cursor.fetchone():
         conn.close()
         return jsonify({'success': False, 'error': 'Invalid branch selected'}), 400
     
-    # Create user as INACTIVE (pending admin approval)
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     cursor.execute('''
-        INSERT INTO users (username, password, name, role, branch_id, active)
-        VALUES (?, ?, ?, ?, ?, 0)
-    ''', (username, password_hash, username.title(), role, branch_id))
+        INSERT INTO users (username, password, name, role, branch_id, email, active)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+    ''', (username, password_hash, username.title(), role, branch_id, email))
     
     conn.commit()
     conn.close()

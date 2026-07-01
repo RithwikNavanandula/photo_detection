@@ -760,9 +760,10 @@
             flex: 1;
         }
     </style>
+    <link rel="stylesheet" href="css/dashboard-theme.css">
 </head>
 
-<body>
+<body class="dashboard-shell">
     <!-- Auth Check -->
     <script>
         const userData = localStorage.getItem('user');
@@ -815,14 +816,14 @@
                 </div>
                 <div class="header-actions">
                     <select id="sort-filter"
-                        style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;margin-right:8px;">
+                        style="padding:8px 12px;border-radius:12px;background:#f5f8fc;border:1px solid var(--suite-border,#dce7f2);color:#16324a;font-size:0.85rem;margin-right:8px;font-weight:600;width:auto;">
                         <option value="newest">📅 Newest First</option>
                         <option value="oldest">📅 Oldest First</option>
                         <option value="expiry-asc">⚠️ Expiry (Ascending)</option>
                         <option value="expiry-desc">⚠️ Expiry (Descending)</option>
                     </select>
                     <select id="branch-filter"
-                        style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:var(--text);font-size:0.85rem;display:none;">
+                        style="padding:8px 12px;border-radius:12px;background:#f5f8fc;border:1px solid var(--suite-border,#dce7f2);color:#16324a;font-size:0.85rem;display:none;font-weight:600;width:auto;">
                         <option value="">All Branches</option>
                     </select>
                 </div>

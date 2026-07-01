@@ -108,7 +108,12 @@ const App = {
         }
     },
 
-    logout() {
+    async logout() {
+        try {
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (err) {
+            console.warn('Logout request failed:', err);
+        }
         localStorage.removeItem('user');
         window.location.href = '/';
     },
@@ -197,7 +202,7 @@ const App = {
             this.showResults(this.currentScan);
 
             // Auto-save if continuous mode
-            if (this.el.continuous.checked) {
+            if (this.el.continuous?.checked) {
                 await this.save();
                 this.toast('✅ Saved! Ready for next');
             }

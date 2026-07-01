@@ -234,9 +234,10 @@
             border: 1px solid var(--error);
         }
     </style>
+    <link rel="stylesheet" href="css/dashboard-theme.css">
 </head>
 
-<body>
+<body class="dashboard-shell">
     <!-- Sidebar -->
     <nav class="sidebar">
         <div class="sidebar-logo">🛠️ Admin Panel</div>
@@ -499,6 +500,15 @@
 
         function hideMessage() {
             document.getElementById('message').style.display = 'none';
+        }
+
+        function handleCSVUpload(event) {
+            alert('CSV import is available from the main dashboard.');
+            event.target.value = '';
+        }
+
+        function downloadReport() {
+            window.location.href = '/api/admin/export';
         }
 
         function logout() {
