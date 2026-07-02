@@ -19,9 +19,11 @@ from email.mime.multipart import MIMEMultipart
 from functools import wraps
 from datetime import datetime
 from flask import Response
-from dotenv import load_dotenv
-
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed; env vars must be set in the system/WSGI config
 
 app = Flask(__name__, static_folder='.')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'label-scanner-secret-key-2026')
@@ -185,12 +187,19 @@ def init_db():
         )
     ''')
     
-    # Migration: Add columns if they don't exist
+    # Migration: Add columns and tables if they don't exist
     for migration in [
         'ALTER TABLE users ADD COLUMN branch_id INTEGER',
         'ALTER TABLE users ADD COLUMN email TEXT',
         'ALTER TABLE scans ADD COLUMN branch_id INTEGER',
         'ALTER TABLE scans ADD COLUMN synced_by TEXT',
+        '''CREATE TABLE IF NOT EXISTS otp_store (
+            username TEXT PRIMARY KEY,
+            otp TEXT NOT NULL,
+            expires REAL NOT NULL,
+            sent_at REAL NOT NULL,
+            attempts INTEGER DEFAULT 0
+        )''',
     ]:
         try:
             cursor.execute(migration)
