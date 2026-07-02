@@ -46,7 +46,8 @@ def setup_database():
             name TEXT NOT NULL,
             role TEXT DEFAULT 'user',
             branch_id INTEGER REFERENCES branches(id),
-            active INTEGER DEFAULT 1
+            active INTEGER DEFAULT 1,
+            email TEXT
         )
     ''')
     print("Created table: users")
@@ -69,6 +70,18 @@ def setup_database():
         )
     ''')
     print("Created table: scans")
+
+    # Create OTP store table (persistent MFA codes)
+    cursor.execute('''
+        CREATE TABLE otp_store (
+            username TEXT PRIMARY KEY,
+            otp TEXT NOT NULL,
+            expires REAL NOT NULL,
+            sent_at REAL NOT NULL,
+            attempts INTEGER DEFAULT 0
+        )
+    ''')
+    print("Created table: otp_store")
     
     # Insert default branch
     cursor.execute('''
@@ -85,10 +98,11 @@ def setup_database():
     ]
     
     for username, password, name, role, bid in users:
+        email = f"{username}@temp.labelscan.local"
         cursor.execute('''
-            INSERT INTO users (username, password, name, role, branch_id, active)
-            VALUES (?, ?, ?, ?, ?, 1)
-        ''', (username, hash_password(password), name, role, bid))
+            INSERT INTO users (username, password, name, role, branch_id, active, email)
+            VALUES (?, ?, ?, ?, ?, 1, ?)
+        ''', (username, hash_password(password), name, role, bid, email))
         print(f"Created user: {username} ({role})")
     
     conn.commit()

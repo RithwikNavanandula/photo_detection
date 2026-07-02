@@ -19,17 +19,17 @@ from email.mime.multipart import MIMEMultipart
 from functools import wraps
 from datetime import datetime
 from flask import Response
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__, static_folder='.')
-app.secret_key = 'label-scanner-secret-key-2026'  # Fixed key for session persistence
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'label-scanner-secret-key-2026')
 CORS(app)
 
-# --- Gmail OTP Config ---
-GMAIL_SENDER = 'navarithwik@gmail.com'
-GMAIL_APP_PASSWORD = 'lmkrsrkvisaxpypm'  # App password (spaces removed)
-
-# In-memory OTP store: {username: {otp, expires, attempts}}
-otp_store = {}
+# --- Gmail OTP Config (loaded from .env) ---
+GMAIL_SENDER = os.getenv('GMAIL_SENDER', '')
+GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
 
 # --- Authentication Decorators ---
 
@@ -71,6 +71,52 @@ def get_db():
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+# --- SQLite-backed OTP helpers (survive server restarts) ---
+
+def _init_otp_table():
+    conn = get_db()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS otp_store (
+            username TEXT PRIMARY KEY,
+            otp TEXT NOT NULL,
+            expires REAL NOT NULL,
+            sent_at REAL NOT NULL,
+            attempts INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def otp_get(username):
+    conn = get_db()
+    row = conn.execute('SELECT * FROM otp_store WHERE username = ?', (username,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def otp_set(username, otp, expires, sent_at, attempts=0):
+    conn = get_db()
+    conn.execute('''
+        INSERT INTO otp_store (username, otp, expires, sent_at, attempts)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            otp=excluded.otp, expires=excluded.expires,
+            sent_at=excluded.sent_at, attempts=excluded.attempts
+    ''', (username, otp, expires, sent_at, attempts))
+    conn.commit()
+    conn.close()
+
+def otp_increment_attempts(username):
+    conn = get_db()
+    conn.execute('UPDATE otp_store SET attempts = attempts + 1 WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
+
+def otp_delete(username):
+    conn = get_db()
+    conn.execute('DELETE FROM otp_store WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
 
 def init_db():
     """Initialize database with branches, users, and scans tables"""
@@ -195,6 +241,7 @@ def init_db():
 
 # Initialize database on module load (needed for WSGI/PythonAnywhere)
 init_db()
+_init_otp_table()
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -282,30 +329,41 @@ def send_otp_email(to_email, otp, username):
         return False
 
 
-@app.route('/api/get-login-method', methods=['POST'])
-def get_login_method():
-    """Returns the allowed login methods and masked email for a username"""
-    data = request.get_json()
-    username = data.get('username', '').strip()
-    if not username:
-        return jsonify({'success': False, 'error': 'Username required'}), 400
-
+def resolve_user(identifier):
+    """Look up a user by username OR email. Returns the sqlite Row or None."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT role, email, active FROM users WHERE username = ?', (username,))
+    # Try username first, then email
+    cursor.execute(
+        'SELECT username, name, role, email, active FROM users WHERE username = ? OR LOWER(email) = LOWER(?)',
+        (identifier, identifier)
+    )
     user = cursor.fetchone()
     conn.close()
+    return user
 
+@app.route('/api/get-login-method', methods=['POST'])
+def get_login_method():
+    """Returns the allowed login methods and masked email for a username or email"""
+    data = request.get_json()
+    identifier = data.get('username', '').strip()
+    if not identifier:
+        return jsonify({'success': False, 'error': 'Username or email required'}), 400
+
+    user = resolve_user(identifier)
     if not user:
-        return jsonify({'success': False, 'error': 'User not found'}), 404
+        return jsonify({'success': False, 'error': 'No account found with that username or email'}), 404
 
     if user['active'] == 0:
         return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
 
     role = user['role']
     email = user['email'] or ''
-    # Mask email: na***ik@gmail.com
-    if email and '@' in email:
+    is_temp_email = email.endswith('@temp.labelscan.local')
+    has_real_email = bool(email and '@' in email and not is_temp_email)
+
+    # Mask email for display
+    if has_real_email:
         local, domain = email.split('@', 1)
         masked = local[:2] + '***' + local[-2:] + '@' + domain if len(local) > 4 else '***@' + domain
     else:
@@ -313,11 +371,11 @@ def get_login_method():
 
     return jsonify({
         'success': True,
+        'username': user['username'],  # resolved canonical username
         'role': role,
-        'has_email': bool(email and '@' not in email.split('@')[1].split('.')[0] == '' or email),
         'masked_email': masked,
         'allow_password': role in ('admin', 'superadmin'),
-        'allow_otp': bool(email and '@' in email)
+        'allow_otp': has_real_email
     })
 
 
@@ -330,42 +388,36 @@ def send_otp():
         return jsonify({'success': False, 'error': 'Username required'}), 400
 
     # Rate limit: 1 OTP per 60s
-    existing = otp_store.get(username)
+    existing = otp_get(username)
     if existing and time.time() - existing.get('sent_at', 0) < 60:
         wait = int(60 - (time.time() - existing['sent_at']))
         return jsonify({'success': False, 'error': f'Please wait {wait}s before requesting another OTP'}), 429
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT username, name, email, active FROM users WHERE username = ?', (username,))
-    user = cursor.fetchone()
-    conn.close()
+    user = resolve_user(username)
 
     if not user:
-        return jsonify({'success': False, 'error': 'User not found'}), 404
+        return jsonify({'success': False, 'error': 'No account found with that username or email'}), 404
     if user['active'] == 0:
         return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
-    if not user['email'] or '@' not in user['email']:
+
+    email = user['email'] or ''
+    if not email or '@' not in email or email.endswith('@temp.labelscan.local'):
         return jsonify({'success': False, 'error': 'No email on file. Contact your admin.'}), 400
 
+    # Use canonical username as OTP key
+    canon = user['username']
     otp = str(random.randint(100000, 999999))
-    otp_store[username] = {
-        'otp': otp,
-        'expires': time.time() + 300,  # 5 minutes
-        'sent_at': time.time(),
-        'attempts': 0
-    }
+    now = time.time()
+    otp_set(canon, otp, expires=now + 300, sent_at=now)
 
-    sent = send_otp_email(user['email'], otp, user['name'] or username)
+    sent = send_otp_email(email, otp, user['name'] or canon)
     if not sent:
-        del otp_store[username]
+        otp_delete(canon)
         return jsonify({'success': False, 'error': 'Failed to send email. Try again later.'}), 500
 
-    # Return masked email
-    email = user['email']
     local, domain = email.split('@', 1)
     masked = local[:2] + '***' + local[-2:] + '@' + domain if len(local) > 4 else '***@' + domain
-    return jsonify({'success': True, 'message': f'OTP sent to {masked}'})
+    return jsonify({'success': True, 'message': f'OTP sent to {masked}', 'username': canon})
 
 
 @app.route('/api/verify-otp', methods=['POST'])
@@ -378,24 +430,25 @@ def verify_otp():
     if not username or not otp_input:
         return jsonify({'success': False, 'error': 'Username and OTP required'}), 400
 
-    record = otp_store.get(username)
+    record = otp_get(username)
     if not record:
         return jsonify({'success': False, 'error': 'No OTP found. Please request a new one.'}), 400
 
     if time.time() > record['expires']:
-        del otp_store[username]
+        otp_delete(username)
         return jsonify({'success': False, 'error': 'OTP has expired. Please request a new one.'}), 400
 
-    record['attempts'] = record.get('attempts', 0) + 1
+    otp_increment_attempts(username)
+    record = otp_get(username)  # re-fetch updated attempts
     if record['attempts'] > 5:
-        del otp_store[username]
+        otp_delete(username)
         return jsonify({'success': False, 'error': 'Too many attempts. Please request a new OTP.'}), 400
 
     if otp_input != record['otp']:
         return jsonify({'success': False, 'error': f'Incorrect OTP. {5 - record["attempts"]} attempts left.'}), 401
 
     # OTP correct — clear store and log in
-    del otp_store[username]
+    otp_delete(username)
 
     conn = get_db()
     cursor = conn.cursor()

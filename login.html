@@ -404,26 +404,56 @@
         </div>
 
         <div class="login-box">
-            <h1>Sign in</h1>
-            <p>Welcome back — please enter your details.</p>
-
-            <div class="alert" id="login-error"></div>
-
-            <div class="form-group">
-                <label for="username">User ID</label>
-                <input type="text" id="username" class="form-control" placeholder="34001">
+            <!-- Step 1: Username or Email -->
+            <div id="step-username">
+                <h1>Sign in</h1>
+                <p>Welcome back — enter your username or email to continue.</p>
+                <div class="alert" id="err-username"></div>
+                <div class="form-group">
+                    <label for="username">Username or Email</label>
+                    <input type="text" id="username" class="form-control" placeholder="john or john@example.com" autocomplete="username">
+                </div>
+                <button class="btn-signin" id="btn-next" onclick="checkLoginMethod()">
+                    <span class="btn-icon">→</span>
+                    <span class="btn-text">Continue</span>
+                </button>
             </div>
 
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" class="form-control" placeholder="••••••••">
-                <button type="button" class="show-password" onclick="togglePassword()">Show</button>
+            <!-- Step 2a: Password (admins) -->
+            <div id="step-password" style="display:none;">
+                <button onclick="goBack()" style="background:none;border:none;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:18px;">← Back</button>
+                <h1>Sign in</h1>
+                <p id="pwd-hint">Enter your password to continue.</p>
+                <div class="alert" id="err-password"></div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="form-control" placeholder="••••••••" autocomplete="current-password">
+                    <button type="button" class="show-password" onclick="togglePassword()">Show</button>
+                </div>
+                <button class="btn-signin" id="btn-login" onclick="doLogin()">
+                    <span class="btn-icon">→</span>
+                    <span class="btn-text">Sign in</span>
+                </button>
             </div>
 
-            <button class="btn-signin" id="btn-login" onclick="doLogin()">
-                <span class="btn-icon">→</span>
-                <span class="btn-text">Sign in</span>
-            </button>
+            <!-- Step 2b: OTP (regular users) -->
+            <div id="step-otp" style="display:none;">
+                <button onclick="goBack()" style="background:none;border:none;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:18px;">← Back</button>
+                <h1>Verify</h1>
+                <p id="otp-hint">A 6-digit code was sent to your email.</p>
+                <div class="alert" id="err-otp"></div>
+                <div class="form-group">
+                    <label for="otp-input">One-Time Code</label>
+                    <input type="text" id="otp-input" class="form-control" placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+                </div>
+                <button class="btn-signin" id="btn-verify" onclick="doVerifyOtp()">
+                    <span class="btn-icon">✓</span>
+                    <span class="btn-text">Verify & Sign in</span>
+                </button>
+                <p id="resend-row" style="margin-top:14px;font-size:13px;color:var(--text-gray);">
+                    Didn't get it? <button onclick="doSendOtp(true)" style="background:none;border:none;color:var(--blue);font-weight:600;cursor:pointer;font-size:13px;">Resend code</button>
+                </p>
+            </div>
         </div>
 
         <div class="footer-text">
@@ -462,70 +492,177 @@
     </div>
 
     <script>
+        let currentUser = '';
+
+        // ── helpers ──────────────────────────────────────────────
+        function showErr(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.classList.add('show');
+        }
+        function clearErr(id) {
+            const el = document.getElementById(id);
+            el.textContent = '';
+            el.classList.remove('show');
+        }
+        function setLoading(btnId, loading, label) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.disabled = loading;
+            btn.querySelector('.btn-text').innerHTML = loading
+                ? '<div class="spinner"></div>'
+                : label;
+        }
+        function showStep(name) {
+            ['step-username', 'step-password', 'step-otp'].forEach(id => {
+                document.getElementById(id).style.display = id === name ? '' : 'none';
+            });
+        }
+        function goBack() { showStep('step-username'); }
+
         function togglePassword() {
             const pwd = document.getElementById('password');
             const btn = document.querySelector('.show-password');
-            if (pwd.type === 'password') {
-                pwd.type = 'text';
-                btn.textContent = 'Hide';
-            } else {
-                pwd.type = 'password';
-                btn.textContent = 'Show';
+            if (pwd.type === 'password') { pwd.type = 'text'; btn.textContent = 'Hide'; }
+            else { pwd.type = 'password'; btn.textContent = 'Show'; }
+        }
+
+        function redirectUser(user) {
+            localStorage.setItem('user', JSON.stringify(user));
+            const cb = '?t=' + Date.now();
+            window.location.replace(
+                (user.role === 'superadmin' || user.role === 'admin') ? '/admin' + cb : '/app' + cb
+            );
+        }
+
+        // ── Step 1: check login method ────────────────────────────
+        async function checkLoginMethod() {
+            currentUser = document.getElementById('username').value.trim();
+            clearErr('err-username');
+            if (!currentUser) { showErr('err-username', 'Please enter your User ID'); return; }
+
+            setLoading('btn-next', true, 'Continue');
+            try {
+                const res = await fetch('/api/get-login-method', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser })
+                });
+                const data = await res.json();
+                if (!data.success) { showErr('err-username', data.error); return; }
+
+                // Use the canonical username resolved by the server
+                currentUser = data.username || currentUser;
+
+                if (data.allow_password && !data.allow_otp) {
+                    // Admin with no real email — show password
+                    document.getElementById('pwd-hint').textContent =
+                        `Signing in as ${currentUser}. Enter your password.`;
+                    showStep('step-password');
+                    document.getElementById('password').focus();
+                } else if (data.allow_otp) {
+                    // Regular user or admin with email — send OTP
+                    await doSendOtp(false);
+                } else {
+                    showErr('err-username', 'No login method available. Contact your admin.');
+                }
+            } catch (e) {
+                showErr('err-username', 'Connection error. Please try again.');
+            } finally {
+                setLoading('btn-next', false, 'Continue');
             }
         }
 
-        async function doLogin() {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-            const errBox = document.getElementById('login-error');
-            const btn = document.getElementById('btn-login');
-
-            errBox.classList.remove('show');
-
-            if (!username || !password) {
-                errBox.textContent = 'Please enter both User ID and Password';
-                errBox.classList.add('show');
-                return;
+        // ── OTP: send ─────────────────────────────────────────────
+        async function doSendOtp(isResend) {
+            clearErr('err-otp');
+            if (isResend) setLoading('btn-verify', true, 'Verify & Sign in');
+            try {
+                const res = await fetch('/api/send-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    if (isResend) showErr('err-otp', data.error);
+                    else showErr('err-username', data.error);
+                    return;
+                }
+                // Capture canonical username if server resolved from email
+                if (data.username) currentUser = data.username;
+                document.getElementById('otp-hint').textContent = data.message;
+                showStep('step-otp');
+                document.getElementById('otp-input').value = '';
+                document.getElementById('otp-input').focus();
+            } catch (e) {
+                const errId = isResend ? 'err-otp' : 'err-username';
+                showErr(errId, 'Connection error. Please try again.');
+            } finally {
+                if (isResend) setLoading('btn-verify', false, 'Verify & Sign in');
             }
+        }
 
-            btn.disabled = true;
-            btn.querySelector('.btn-text').innerHTML = '<div class="spinner"></div>';
+        // ── OTP: verify ───────────────────────────────────────────
+        async function doVerifyOtp() {
+            clearErr('err-otp');
+            const otp = document.getElementById('otp-input').value.trim();
+            if (!otp) { showErr('err-otp', 'Please enter the 6-digit code'); return; }
 
+            setLoading('btn-verify', true, 'Verify & Sign in');
+            try {
+                const res = await fetch('/api/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser, otp })
+                });
+                const data = await res.json();
+                if (data.success) { redirectUser(data.user); }
+                else { showErr('err-otp', data.error); }
+            } catch (e) {
+                showErr('err-otp', 'Connection error. Please try again.');
+            } finally {
+                setLoading('btn-verify', false, 'Verify & Sign in');
+            }
+        }
+
+        // ── Password login (admin) ────────────────────────────────
+        async function doLogin() {
+            clearErr('err-password');
+            const password = document.getElementById('password').value;
+            if (!password) { showErr('err-password', 'Please enter your password'); return; }
+
+            setLoading('btn-login', true, 'Sign in');
             try {
                 const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username: currentUser, password })
                 });
                 const data = await res.json();
-
-                if (data.success) {
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    const cb = '?t=' + Date.now();
-                    window.location.replace(
-                        (data.user.role === 'superadmin' || data.user.role === 'admin')
-                            ? '/admin' + cb : '/app' + cb
-                    );
-                } else {
-                    errBox.textContent = data.error || 'Invalid credentials';
-                    errBox.classList.add('show');
-                }
+                if (data.success) { redirectUser(data.user); }
+                else { showErr('err-password', data.error || 'Invalid credentials'); }
             } catch (e) {
-                errBox.textContent = 'Connection error. Please try again.';
-                errBox.classList.add('show');
+                showErr('err-password', 'Connection error. Please try again.');
             } finally {
-                btn.disabled = false;
-                btn.querySelector('.btn-text').textContent = 'Sign in';
+                setLoading('btn-login', false, 'Sign in');
             }
         }
 
-        document.getElementById('password').addEventListener('keyup', e => {
-            if (e.key === 'Enter') doLogin();
-        });
+        // ── Enter key handlers ────────────────────────────────────
         document.getElementById('username').addEventListener('keyup', e => {
-            if (e.key === 'Enter') doLogin();
+            if (e.key === 'Enter') checkLoginMethod();
+        });
+        document.addEventListener('keyup', e => {
+            if (e.key === 'Enter') {
+                const pwdStep = document.getElementById('step-password');
+                const otpStep = document.getElementById('step-otp');
+                if (pwdStep.style.display !== 'none') doLogin();
+                else if (otpStep.style.display !== 'none') doVerifyOtp();
+            }
         });
     </script>
+
 </body>
 
 </html>
