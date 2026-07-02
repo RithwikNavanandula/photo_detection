@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Scans — Label Scanner</title>
+    <link rel="stylesheet" href="css/dashboard-theme.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { display: flex; min-height: 100vh; }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            position: fixed;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 100;
+        }
+        .sidebar-logo { gap: 10px; }
+        .sidebar-logo img { height: 32px; width: auto; }
+        .sidebar-section { text-transform: uppercase; }
+        .sidebar-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            background: none;
+            width: 100%;
+        }
+
+        /* ── Main ── */
+        .main-content { min-height: 100vh; }
+
+        /* ── Top bar ── */
+        .top-bar { margin-bottom: 24px; }
+        .top-bar h1 { font-size: 1.6rem; }
+        .top-bar p { font-size: 0.88rem; margin-top: 2px; }
+
+        /* ── Stats row ── */
+        .stats-row { margin-bottom: 24px; }
+        .stat-card { cursor: default; }
+        .stat-value { font-size: 2rem !important; }
+
+        /* ── Filters ── */
+        .filters-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .filters-bar input,
+        .filters-bar select {
+            width: auto;
+            min-width: 180px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            border: 1px solid var(--suite-border);
+            background: #f5f8fc;
+            color: var(--suite-text);
+            font-family: inherit;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .filters-bar input:focus,
+        .filters-bar select:focus {
+            border-color: rgba(17,113,185,0.45);
+            box-shadow: 0 0 0 4px rgba(17,113,185,0.1);
+            background: #fff;
+        }
+        .btn-sync-all {
+            padding: 10px 20px;
+            border-radius: 14px;
+            border: none;
+            background: linear-gradient(135deg,#1582cf,#0f6dae);
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.18s, box-shadow 0.18s;
+        }
+        .btn-sync-all:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(17,113,185,0.25); }
+        .btn-sync-all:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        /* ── Grid ── */
+        .scans-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 18px;
+        }
+
+        /* ── Scan Card ── */
+        .scan-card {
+            background: #fff;
+            border: 1px solid var(--suite-border);
+            border-radius: 22px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(22,50,74,0.07);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+        .scan-card:hover { transform: translateY(-3px); box-shadow: 0 16px 36px rgba(22,50,74,0.12); }
+
+        /* image placeholder */
+        .scan-img-wrap {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: linear-gradient(135deg, #eef4f9, #dce7f2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            color: var(--suite-text-soft);
+            position: relative;
+            overflow: hidden;
+        }
+        .scan-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .movement-pill {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+        }
+        .movement-pill.in  { background: #e8f7ef; color: #1f8e59; border: 1px solid #cbead8; }
+        .movement-pill.out { background: #fff3f4; color: #c94d57; border: 1px solid #f2cdd1; }
+
+        /* sync status badge on image */
+        .sync-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+        .sync-badge.synced   { background: #e8f7ef; color: #1f8e59; border: 1px solid #cbead8; }
+        .sync-badge.unsynced { background: #fff3f4; color: #c94d57; border: 1px solid #f2cdd1; }
+
+        /* card body */
+        .scan-body { padding: 14px 16px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        .scan-batch { font-size: 0.95rem; font-weight: 700; color: var(--suite-text); }
+        .scan-meta  { font-size: 0.8rem; color: var(--suite-text-soft); }
+        .scan-location { font-size: 0.8rem; color: var(--suite-text-soft); margin-top: 2px; }
+
+        /* history / sync row */
+        .scan-footer {
+            padding: 10px 16px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border-top: 1px solid #edf2f7;
+        }
+        .sync-history {
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .sync-history.synced   { color: #1f8e59; }
+        .sync-history.unsynced { color: #c94d57; }
+
+        .btn-sync-one {
+            padding: 7px 14px;
+            border-radius: 12px;
+            border: none;
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.18s, box-shadow 0.18s;
+            white-space: nowrap;
+        }
+        .btn-sync-one.unsynced {
+            background: linear-gradient(135deg,#1582cf,#0f6dae);
+            color: #fff;
+        }
+        .btn-sync-one.unsynced:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(17,113,185,0.28); }
+        .btn-sync-one.synced {
+            background: #f0f9f4;
+            color: #1f8e59;
+            border: 1px solid #cbead8;
+            cursor: default;
+        }
+        .btn-sync-one:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+        /* empty state */
+        .empty-state {
+            grid-column: 1/-1;
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--suite-text-soft);
+        }
+        .empty-state .icon { font-size: 3.5rem; margin-bottom: 16px; }
+        .empty-state h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; color: var(--suite-text); }
+
+        /* toast */
+        .toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #16324a;
+            color: #fff;
+            padding: 12px 22px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* spinner inline */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin-inline {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+
+        @media (max-width: 720px) {
+            .scans-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 480px) {
+            .scans-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body class="dashboard-shell">
+
+<!-- ── Sidebar ── -->
+<nav class="sidebar">
+    <div class="sidebar-logo">
+        <img src="/pics/sbc_logo.png" alt="SBC" onerror="this.style.display='none'">
+        <span>Label Scanner</span>
+    </div>
+    <div class="sidebar-section">Navigation</div>
+    <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+    <button class="sidebar-btn active" onclick="location.href='/scanned'">🖼️ <span>My Scans</span></button>
+    <button class="sidebar-btn" id="admin-nav-btn" style="display:none" onclick="location.href='/admin'">🛠️ <span>Dashboard</span></button>
+    <div class="sidebar-divider"></div>
+    <button class="sidebar-btn danger" onclick="doLogout()">🚪 <span>Logout</span></button>
+</nav>
+
+<!-- ── Main ── -->
+<main class="main-content">
+
+    <div class="top-bar">
+        <div>
+            <h1>🖼️ My Scans</h1>
+            <p id="sub-title">All scans saved on this device</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn-sync-all" id="btn-sync-all" onclick="syncAll()">⬆️ Sync All Pending</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-total">–</div>
+            <div class="stat-label">Total Scans</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-synced" style="color:#1f8e59">–</div>
+            <div class="stat-label">✅ Synced</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-unsynced" style="color:#c94d57">–</div>
+            <div class="stat-label">🔴 Not Synced</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-today">–</div>
+            <div class="stat-label">Today</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+        <input type="text" id="search-box" placeholder="🔍 Search batch, flavour…" oninput="applyFilter()">
+        <select id="filter-sync" onchange="applyFilter()">
+            <option value="all">All</option>
+            <option value="unsynced">Not Synced</option>
+            <option value="synced">Synced</option>
+        </select>
+        <select id="filter-movement" onchange="applyFilter()">
+            <option value="all">IN & OUT</option>
+            <option value="IN">IN only</option>
+            <option value="OUT">OUT only</option>
+        </select>
+    </div>
+
+    <!-- Grid -->
+    <div class="scans-grid" id="scans-grid">
+        <div class="empty-state">
+            <div class="icon">⏳</div>
+            <h2>Loading…</h2>
+        </div>
+    </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/storage.js"></script>
+<script>
+// ── Auth ──────────────────────────────────────────────────────────
+const userData = localStorage.getItem('user');
+if (!userData) { window.location.href = '/'; }
+const currentUser = userData ? JSON.parse(userData) : {};
+if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
+    document.getElementById('admin-nav-btn').style.display = '';
+}
+document.getElementById('sub-title').textContent =
+    `Scans saved on this device by ${currentUser.name || currentUser.username || 'you'}`;
+
+// ── Toast ─────────────────────────────────────────────────────────
+function showToast(msg, dur = 2800) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── Logout ────────────────────────────────────────────────────────
+async function doLogout() {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+    localStorage.removeItem('user');
+    window.location.href = '/';
+}
+
+// ── State ─────────────────────────────────────────────────────────
+let allScans = [];   // raw IndexedDB records
+// synced flag lives on each record as scan.synced (bool)
+
+// ── Sync a single scan to DB ──────────────────────────────────────
+async function syncScan(scan) {
+    const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            scans: [scan],
+            user: currentUser.name || currentUser.username || 'Unknown',
+            branch_id: currentUser.branch_id
+        })
+    });
+    return res.json();
+}
+
+// ── Mark synced in IndexedDB ──────────────────────────────────────
+async function markSynced(scan) {
+    scan.synced = true;
+    // Storage.save does add; we need put — open raw IDB
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open('LabelScanner', 1);
+        req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction('scans', 'readwrite');
+            tx.objectStore('scans').put(scan);
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+        };
+        req.onerror = () => reject(req.error);
+    });
+}
+
+// ── Per-card sync button ──────────────────────────────────────────
+async function syncOne(id) {
+    const btn = document.getElementById(`sync-btn-${id}`);
+    const hist = document.getElementById(`sync-hist-${id}`);
+    if (!btn || btn.disabled) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin-inline"></span>Syncing…';
+
+    const scan = allScans.find(s => s.id === id);
+    if (!scan) { showToast('❌ Scan not found'); return; }
+
+    try {
+        const result = await syncScan(scan);
+        if (result.success) {
+            await markSynced(scan);
+            // Update UI immediately
+            btn.className = 'btn-sync-one synced';
+            btn.textContent = '✅ Synced';
+            if (hist) { hist.textContent = '✅ Synced to DB'; hist.className = 'sync-history synced'; }
+            // Also update badge
+            const badge = document.getElementById(`sync-badge-${id}`);
+            if (badge) { badge.textContent = '✅ Synced'; badge.className = 'sync-badge synced'; }
+            showToast('✅ Scan synced!');
+            updateStats();
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '⬆️ Sync';
+            showToast('❌ ' + (result.error || 'Sync failed'));
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = '⬆️ Sync';
+        showToast('❌ Connection error');
+    }
+}
+
+// ── Sync all pending ──────────────────────────────────────────────
+async function syncAll() {
+    const pending = allScans.filter(s => !s.synced);
+    if (pending.length === 0) { showToast('✅ All scans already synced!'); return; }
+
+    const btn = document.getElementById('btn-sync-all');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin-inline"></span>Syncing…';
+
+    let done = 0, failed = 0;
+    for (const scan of pending) {
+        try {
+            const result = await syncScan(scan);
+            if (result.success) {
+                await markSynced(scan);
+                done++;
+                // Live-update card
+                const b = document.getElementById(`sync-btn-${scan.id}`);
+                const h = document.getElementById(`sync-hist-${scan.id}`);
+                const badge = document.getElementById(`sync-badge-${scan.id}`);
+                if (b) { b.className = 'btn-sync-one synced'; b.textContent = '✅ Synced'; }
+                if (h) { h.textContent = '✅ Synced to DB'; h.className = 'sync-history synced'; }
+                if (badge) { badge.textContent = '✅ Synced'; badge.className = 'sync-badge synced'; }
+            } else { failed++; }
+        } catch { failed++; }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '⬆️ Sync All Pending';
+    updateStats();
+    showToast(`✅ ${done} synced${failed ? `, ❌ ${failed} failed` : ''}`, 3500);
+}
+
+// ── Update stat counters ──────────────────────────────────────────
+function updateStats() {
+    const today = new Date().toLocaleDateString('en-IN');
+    const synced = allScans.filter(s => s.synced).length;
+    const unsynced = allScans.filter(s => !s.synced).length;
+    const todayCount = allScans.filter(s => (s.timestamp || '').includes(today.split('/')[0])).length;
+
+    document.getElementById('stat-total').textContent    = allScans.length;
+    document.getElementById('stat-synced').textContent   = synced;
+    document.getElementById('stat-unsynced').textContent = unsynced;
+    document.getElementById('stat-today').textContent    = todayCount;
+}
+
+// ── Render cards ──────────────────────────────────────────────────
+function renderCard(scan) {
+    const isSynced   = !!scan.synced;
+    const movement   = (scan.movement || 'IN').toUpperCase();
+    const flavour    = scan.flavour   || '–';
+    const batchNo    = scan.batchNo   || '–';
+    const mfgDate    = scan.mfgDate   || '–';
+    const expiryDate = scan.expiryDate|| '–';
+    const rack       = scan.rackNo    || '–';
+    const shelf      = scan.shelfNo   || '–';
+    const timestamp  = scan.timestamp || '–';
+
+    const imgHtml = scan.imageData
+        ? `<img src="${scan.imageData}" alt="scan">`
+        : `<span>📷</span>`;
+
+    return `
+    <div class="scan-card" id="card-${scan.id}">
+        <div class="scan-img-wrap">
+            ${imgHtml}
+            <span class="movement-pill ${movement.toLowerCase()}">${movement}</span>
+            <span class="sync-badge ${isSynced ? 'synced' : 'unsynced'}" id="sync-badge-${scan.id}">
+                ${isSynced ? '✅ Synced' : '🔴 Not Synced'}
+            </span>
+        </div>
+        <div class="scan-body">
+            <div class="scan-batch">Batch: ${batchNo}</div>
+            <div class="scan-meta">🍹 ${flavour}</div>
+            <div class="scan-meta">📅 Mfg: ${mfgDate} &nbsp;|&nbsp; Exp: ${expiryDate}</div>
+            <div class="scan-location">🗄️ ${rack} &nbsp;›&nbsp; 📚 ${shelf}</div>
+            <div class="scan-meta" style="margin-top:4px;font-size:0.74rem;">🕐 ${timestamp}</div>
+        </div>
+        <div class="scan-footer">
+            <span class="sync-history ${isSynced ? 'synced' : 'unsynced'}" id="sync-hist-${scan.id}">
+                ${isSynced ? '✅ Synced to DB' : '🔴 Not synced to DB'}
+            </span>
+            <button
+                id="sync-btn-${scan.id}"
+                class="btn-sync-one ${isSynced ? 'synced' : 'unsynced'}"
+                onclick="${isSynced ? '' : `syncOne(${scan.id})`}"
+                ${isSynced ? 'disabled' : ''}>
+                ${isSynced ? '✅ Synced' : '⬆️ Sync'}
+            </button>
+        </div>
+    </div>`;
+}
+
+// ── Filter & render ───────────────────────────────────────────────
+function applyFilter() {
+    const q  = document.getElementById('search-box').value.toLowerCase();
+    const sf = document.getElementById('filter-sync').value;
+    const mf = document.getElementById('filter-movement').value;
+
+    const filtered = allScans.filter(scan => {
+        const text = `${scan.batchNo} ${scan.flavour} ${scan.rackNo} ${scan.shelfNo}`.toLowerCase();
+        if (q && !text.includes(q)) return false;
+        if (sf === 'synced'   && !scan.synced)  return false;
+        if (sf === 'unsynced' &&  scan.synced)  return false;
+        if (mf !== 'all' && (scan.movement || 'IN') !== mf) return false;
+        return true;
+    });
+
+    const grid = document.getElementById('scans-grid');
+    if (filtered.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">🔍</div>
+                <h2>No scans found</h2>
+                <p>Try adjusting your filters.</p>
+            </div>`;
+        return;
+    }
+    grid.innerHTML = filtered.map(renderCard).join('');
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+async function init() {
+    await Storage.init();
+    allScans = await Storage.getAll(); // newest first
+
+    if (allScans.length === 0) {
+        document.getElementById('scans-grid').innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📷</div>
+                <h2>No scans yet</h2>
+                <p>Go to the <a href="/app" style="color:var(--suite-accent)">Scanner</a> and scan your first label.</p>
+            </div>`;
+        document.getElementById('stat-total').textContent    = 0;
+        document.getElementById('stat-synced').textContent   = 0;
+        document.getElementById('stat-unsynced').textContent = 0;
+        document.getElementById('stat-today').textContent    = 0;
+        return;
+    }
+
+    updateStats();
+    applyFilter();
+}
+
+init();
+</script>
+</body>
+</html>

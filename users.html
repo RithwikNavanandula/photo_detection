@@ -322,6 +322,76 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
         }
+
+        /* ── Create User Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(10,10,20,0.65);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: #2d2d44;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px;
+            padding: 28px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+            animation: slideUp 0.22s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+        .modal-box h2 { font-size: 1.1rem; margin-bottom: 20px; color: #fff; }
+        .form-row { margin-bottom: 14px; }
+        .form-row label { display: block; font-size: 0.8rem; color: #a0a0b0; font-weight: 600; margin-bottom: 6px; }
+        .form-row input,
+        .form-row select {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            outline: none;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .form-row input:focus,
+        .form-row select:focus { border-color: #6c63ff; box-shadow: 0 0 0 3px rgba(108,99,255,0.18); }
+        .form-row select option { background: #2d2d44; }
+        .modal-alert {
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.4);
+            color: #fca5a5;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            margin-bottom: 14px;
+            display: none;
+        }
+        .modal-alert.show { display: block; }
+        .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn-modal-cancel {
+            padding: 10px 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+            background: transparent; color: #a0a0b0; cursor: pointer; font-family: inherit; font-size: 0.9rem;
+        }
+        .btn-modal-submit {
+            padding: 10px 22px; border-radius: 8px; border: none;
+            background: linear-gradient(135deg,#6c63ff,#5a54d4); color: #fff;
+            cursor: pointer; font-family: inherit; font-size: 0.9rem; font-weight: 700;
+            transition: transform 0.18s, box-shadow 0.18s;
+        }
+        .btn-modal-submit:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(108,99,255,0.35); }
+        .btn-modal-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     </style>
     <link rel="stylesheet" href="css/dashboard-theme.css">
 </head>
@@ -377,6 +447,11 @@
                 <div>
                     <h1>👥 User Management</h1>
                 </div>
+                <div class="header-actions">
+                    <button class="btn" id="btn-create-user"
+                        style="background:linear-gradient(135deg,#6c63ff,#5a54d4);color:#fff;padding:10px 18px;border-radius:10px;font-size:0.9rem;"
+                        onclick="openCreateModal()">➕ Create User</button>
+                </div>
             </header>
 
             <!-- Pending Users -->
@@ -394,6 +469,44 @@
                     <div class="no-users">Loading...</div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div class="modal-overlay" id="create-modal">
+        <div class="modal-box">
+            <h2>➕ Create New User</h2>
+            <div class="modal-alert" id="modal-err"></div>
+            <form id="create-form" onsubmit="event.preventDefault(); submitCreateUser()">
+                <div class="form-row">
+                    <label>Full Name</label>
+                    <input type="text" id="new-name" placeholder="John Doe" required>
+                </div>
+                <div class="form-row">
+                    <label>Username</label>
+                    <input type="text" id="new-username" placeholder="johndoe" autocomplete="off" required>
+                </div>
+                <div class="form-row">
+                    <label>Email (used for OTP login)</label>
+                    <input type="email" id="new-email" placeholder="john@example.com" required>
+                </div>
+                <div class="form-row">
+                    <label>Password</label>
+                    <input type="password" id="new-password" placeholder="Min 4 characters" required>
+                </div>
+                <div class="form-row">
+                    <label>Role</label>
+                    <select id="new-role"><option value="user">User</option></select>
+                </div>
+                <div class="form-row">
+                    <label>Branch</label>
+                    <select id="new-branch"><option value="">Loading…</option></select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modal-cancel" onclick="closeCreateModal()">Cancel</button>
+                    <button type="submit" class="btn-modal-submit" id="btn-modal-submit">Create User</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -533,7 +646,101 @@
 
         // Load on page load
         loadUsers();
+
+        // ── Create User Modal ──────────────────────────────────────
+        let branches = [];
+
+        async function openCreateModal() {
+            // Load branches for dropdown
+            if (branches.length === 0) {
+                try {
+                    const res = await fetch('/api/branches');
+                    const data = await res.json();
+                    branches = data.branches || [];
+                } catch {}
+            }
+            const branchSel = document.getElementById('new-branch');
+            branchSel.innerHTML = '<option value="">— Select Branch —</option>' +
+                branches.map(b => `<option value="${b.id}">${b.name} (${b.code})</option>`).join('');
+
+            // Show/hide Admin role option based on current user role
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            const roleSel = document.getElementById('new-role');
+            roleSel.innerHTML = '<option value="user">User</option>' +
+                (currentUser.role === 'superadmin' ? '<option value="admin">Admin</option>' : '');
+
+            document.getElementById('create-modal').classList.add('open');
+            document.getElementById('new-username').focus();
+        }
+
+        function closeCreateModal() {
+            document.getElementById('create-modal').classList.remove('open');
+            document.getElementById('create-form').reset();
+            document.getElementById('modal-err').classList.remove('show');
+        }
+
+        async function submitCreateUser() {
+            const btn = document.getElementById('btn-modal-submit');
+            const err = document.getElementById('modal-err');
+            err.classList.remove('show');
+
+            const username  = document.getElementById('new-username').value.trim();
+            const name      = document.getElementById('new-name').value.trim();
+            const email     = document.getElementById('new-email').value.trim();
+            const password  = document.getElementById('new-password').value;
+            const role      = document.getElementById('new-role').value;
+            const branch_id = document.getElementById('new-branch').value;
+
+            if (!username || !name || !email || !password || !branch_id) {
+                err.textContent = 'All fields are required.';
+                err.classList.add('show');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Creating…';
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, name, email, password, role, branch_id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    closeCreateModal();
+                    // Auto-approve the newly created user
+                    await loadUsers();
+                    // Find and approve them
+                    const pendingRes = await fetch('/api/admin/users/pending');
+                    const pendingData = await pendingRes.json();
+                    const newUser = (pendingData.users || []).find(u => u.username === username);
+                    if (newUser) {
+                        await fetch('/api/admin/users/approve', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: newUser.id })
+                        });
+                    }
+                    await loadUsers();
+                    alert('✅ User created and activated successfully!');
+                } else {
+                    err.textContent = data.error || 'Failed to create user.';
+                    err.classList.add('show');
+                }
+            } catch (e) {
+                err.textContent = 'Connection error. Try again.';
+                err.classList.add('show');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create User';
+            }
+        }
+
+        // Close on backdrop click
+        document.getElementById('create-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeCreateModal();
+        });
     </script>
 </body>
-
 </html>

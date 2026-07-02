@@ -1572,6 +1572,10 @@ def serve_analytics():
 def serve_branches():
     return send_from_directory('.', 'branches.html')
 
+@app.route('/scanned')
+def serve_scanned():
+    return send_from_directory('.', 'scanned.html')
+
 @app.route('/users')
 def serve_users():
     return send_from_directory('.', 'users.html')
