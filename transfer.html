@@ -233,6 +233,21 @@
             color: var(--error);
             border: 1px solid var(--error);
         }
+
+        @media (max-width: 720px) {
+            .card {
+                padding: 22px 18px;
+            }
+
+            .details-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .detail-item span {
+                font-size: 1rem;
+            }
+        }
     </style>
     <link rel="stylesheet" href="css/dashboard-theme.css">
 </head>

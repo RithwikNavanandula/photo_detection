@@ -546,4 +546,22 @@ body.dashboard-shell .spinner {
     body.dashboard-shell .stats-summary {
         grid-template-columns: 1fr;
     }
+
+    body.dashboard-shell .header-actions,
+    body.dashboard-shell .controls,
+    body.dashboard-shell .controls-bar {
+        width: 100%;
+    }
+
+    body.dashboard-shell .header-actions > *,
+    body.dashboard-shell .controls > *,
+    body.dashboard-shell .controls-bar > * {
+        flex: 1 1 100%;
+    }
+
+    body.dashboard-shell .table-container,
+    body.dashboard-shell .matrix-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }

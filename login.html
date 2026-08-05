@@ -29,7 +29,7 @@
             height: 100vh;
             display: flex;
             background-color: #fff;
-            overflow: hidden;
+            overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -390,6 +390,136 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
             vertical-align: middle;
+        }
+
+        @media (max-width: 1180px) {
+            .left-panel {
+                padding: 48px 7%;
+            }
+
+            .right-panel {
+                padding: 0 40px;
+            }
+
+            .hero-text {
+                font-size: 44px;
+            }
+
+            .pepsi-bottle {
+                height: 68vh;
+            }
+        }
+
+        @media (max-width: 960px) {
+            body {
+                height: auto;
+                min-height: 100vh;
+                flex-direction: column;
+                overflow-y: auto;
+            }
+
+            .left-panel,
+            .right-panel {
+                width: 100%;
+            }
+
+            .left-panel {
+                min-height: auto;
+                padding: 120px 24px 40px;
+                justify-content: flex-start;
+            }
+
+            .logo-container {
+                top: 24px;
+                left: 24px;
+            }
+
+            .login-box {
+                max-width: 100%;
+                margin-top: 0;
+            }
+
+            .footer-text {
+                position: static;
+                margin-top: 28px;
+            }
+
+            .right-panel {
+                min-height: 360px;
+                padding: 36px 24px 44px;
+            }
+
+            .content-right {
+                max-width: none;
+                margin-left: 0;
+                padding-left: 0;
+            }
+
+            .hero-text {
+                font-size: 38px;
+                margin-bottom: 24px;
+            }
+
+            .features,
+            .brands-logos {
+                flex-wrap: wrap;
+            }
+
+            .features {
+                gap: 12px 18px;
+                margin-bottom: 28px;
+            }
+
+            .map-graphic,
+            .pepsi-bottle {
+                display: none;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .left-panel {
+                padding: 108px 18px 28px;
+            }
+
+            .logo-container {
+                top: 18px;
+                left: 18px;
+            }
+
+            .login-box h1 {
+                font-size: 30px;
+            }
+
+            .login-box p {
+                margin-bottom: 28px;
+            }
+
+            .form-control {
+                padding: 14px 16px;
+            }
+
+            .btn-signin {
+                padding: 10px;
+            }
+
+            .right-panel {
+                min-height: auto;
+                padding: 28px 18px 34px;
+            }
+
+            .command-center,
+            .brands-title {
+                letter-spacing: 2px;
+            }
+
+            .hero-text {
+                font-size: 30px;
+                line-height: 1.18;
+            }
+
+            .features {
+                font-size: 13px;
+            }
         }
     </style>
 </head>

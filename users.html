@@ -392,6 +392,51 @@
         }
         .btn-modal-submit:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(108,99,255,0.35); }
         .btn-modal-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        @media (max-width: 720px) {
+            .container {
+                padding: 12px 0;
+            }
+
+            .section h2 {
+                align-items: flex-start;
+                flex-wrap: wrap;
+            }
+
+            .user-card {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 14px;
+            }
+
+            .user-info h3 {
+                line-height: 1.4;
+            }
+
+            .user-actions {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .user-actions .btn,
+            .user-actions .btn-password {
+                width: 100%;
+            }
+
+            .modal-box {
+                margin: 16px;
+                padding: 22px 18px;
+            }
+
+            .modal-footer {
+                flex-direction: column-reverse;
+            }
+
+            .btn-modal-cancel,
+            .btn-modal-submit {
+                width: 100%;
+            }
+        }
     </style>
     <link rel="stylesheet" href="css/dashboard-theme.css">
 </head>

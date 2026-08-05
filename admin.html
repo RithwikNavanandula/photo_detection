@@ -220,6 +220,33 @@
             opacity: 0.9;
         }
 
+        .dashboard-grid-responsive {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+            gap: 20px;
+        }
+
+        .expiry-details-table {
+            min-width: 720px;
+        }
+
+        @media (max-width: 980px) {
+            .dashboard-grid-responsive {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .header-actions {
+                width: 100%;
+            }
+
+            .header-actions select {
+                width: 100% !important;
+                margin-right: 0 !important;
+            }
+        }
+
         /* Dashboard Grid - 3 Column Layout */
         .dashboard-3col {
             display: grid;
@@ -850,7 +877,7 @@
             </div>
 
             <!-- Dashboard Grid - 2 Column Layout -->
-            <div class="dashboard-grid" style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
+            <div class="dashboard-grid-responsive">
                 <!-- Column 1: Expiry Forecast Chart -->
                 <div class="card">
                     <h2>⏰ Expiry Forecast (Next 20 Weeks)</h2>
@@ -872,7 +899,7 @@
             <div id="expiry-details-panel" class="card" style="margin-top: 20px; display: none;">
                 <h2 id="expiry-details-title">📋 Expiry Details</h2>
                 <div id="expiry-details-content" style="overflow-x: auto;">
-                    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                    <table class="expiry-details-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;">
                         <thead>
                             <tr style="background:rgba(255,255,255,0.05);text-align:left;">
                                 <th style="padding:10px;color:var(--text2);">Batch No</th>

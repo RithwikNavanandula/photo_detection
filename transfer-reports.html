@@ -144,12 +144,13 @@
         .table-container {
             background: var(--card);
             border-radius: 12px;
-            overflow: hidden;
+            overflow-x: auto;
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         table {
             width: 100%;
+            min-width: 760px;
             border-collapse: collapse;
         }
 
@@ -232,6 +233,19 @@
         .action-btn.reject:hover {
             color: var(--error);
             border-color: var(--error);
+        }
+
+        @media (max-width: 720px) {
+            .controls {
+                width: 100%;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .controls .filter-select,
+            .controls .action-btn {
+                width: 100%;
+            }
         }
     </style>
     <link rel="stylesheet" href="css/dashboard-theme.css">
