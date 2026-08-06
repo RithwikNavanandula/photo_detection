@@ -449,8 +449,8 @@
             window.location.href = '/';
         } else {
             const user = JSON.parse(userData);
-            if (user.role !== 'admin' && user.role !== 'superadmin') {
-                alert('Access denied. Admin only.');
+            if (user.role !== 'superadmin') {
+                alert('Access denied. Superadmin only.');
                 window.location.href = '/app';
             }
             // Show Branches button for superadmin
@@ -471,11 +471,14 @@
         <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
         <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/authorizations'">🔐 <span>Authorizations</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
                 Reports</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pending-requests'">⏳ <span>Pending
+                Requests</span></button>
         <button class="sidebar-btn active" onclick="location.href='/users'">👥 <span>Users</span></button>
         <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
-            <span>Branches</span></button>
+            <span>Branches &amp; Houses</span></button>
 
         <div class="sidebar-divider"></div>
         <div class="sidebar-section">Actions</div>
@@ -711,8 +714,7 @@
             // Show/hide Admin role option based on current user role
             const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
             const roleSel = document.getElementById('new-role');
-            roleSel.innerHTML = '<option value="user">User</option>' +
-                (currentUser.role === 'superadmin' ? '<option value="admin">Admin</option>' : '');
+            roleSel.innerHTML = '<option value="user">User</option>';
 
             document.getElementById('create-modal').classList.add('open');
             document.getElementById('new-username').focus();

@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transfer Receipts - Label Scanner</title>
+    <style>
+        :root {
+            --bg: #1e1e2e;
+            --card: #2d2d44;
+            --accent: #6c63ff;
+            --accent2: #4a4a6a;
+            --text: #ffffff;
+            --text2: #a0a0b0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --sidebar: #2d2d44;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg) 0%, #0f0f23 100%);
+            min-height: 100vh;
+            color: var(--text);
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-height: 100vh;
+            background: #2d2d44;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 12px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #6c63ff;
+            padding: 12px 8px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #a0a0b0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+        }
+
+        .sidebar-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+        .sidebar-btn.active { background: #6c63ff; color: #ffffff; }
+        .sidebar-btn.danger { color: #ef4444; }
+        .sidebar-btn.danger:hover { background: rgba(239, 68, 68, 0.2); }
+        .sidebar-divider { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 12px 0; }
+        .sidebar-section {
+            font-size: 0.7rem;
+            color: #a0a0b0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 14px;
+            margin-top: 8px;
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 220px;
+            padding: 40px;
+            max-width: calc(100% - 220px);
+        }
+
+        .container { max-width: 1300px; margin: 0 auto; }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 24px;
+        }
+
+        .header-copy h1 {
+            font-size: 1.85rem;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+
+        .header-copy p { color: var(--text2); font-size: 0.95rem; }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .filter-select {
+            padding: 10px 12px;
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text);
+            outline: none;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+
+        .stat-pill {
+            background: rgba(108, 99, 255, 0.12);
+            border: 1px solid rgba(108, 99, 255, 0.25);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 999px;
+            font-size: 0.88rem;
+        }
+
+        .table-container {
+            background: var(--card);
+            border-radius: 14px;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        table { width: 100%; min-width: 960px; border-collapse: collapse; }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text2);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        td { color: var(--text); font-size: 0.95rem; }
+        tr.receipt-row { cursor: pointer; }
+        tr.receipt-row:hover { background: rgba(255, 255, 255, 0.03); }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .status-badge.submitted { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
+        .status-badge.pending { background: rgba(245, 158, 11, 0.18); color: var(--warning); }
+        .status-badge.approved { background: rgba(16, 185, 129, 0.18); color: var(--success); }
+        .status-badge.completed { background: rgba(108, 99, 255, 0.18); color: #b6b0ff; }
+        .status-badge.rejected { background: rgba(239, 68, 68, 0.18); color: #f87171; }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text2);
+            padding: 34px 20px;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(6, 8, 20, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal {
+            width: min(980px, 100%);
+            max-height: 90vh;
+            overflow: auto;
+            background: #232338;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            padding: 18px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .modal-header h2 {
+            font-size: 1.1rem;
+            color: var(--text);
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: var(--text2);
+            font-size: 1.4rem;
+            cursor: pointer;
+        }
+
+        .modal-body { padding: 20px; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .detail-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .detail-card strong {
+            display: block;
+            color: var(--text2);
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 4px;
+        }
+
+        .detail-card span { color: var(--text); font-size: 0.98rem; }
+
+        .section-title {
+            margin: 18px 0 10px;
+            font-size: 0.98rem;
+            color: var(--text);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .btn-action {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6c63ff, #5a54d4);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #0f9a69);
+            color: #fff;
+        }
+
+        .btn-action:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .notice {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #86efac;
+        }
+
+        .notice.warn {
+            background: rgba(245, 158, 11, 0.12);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+        }
+
+        .stock-table {
+            width: 100%;
+            min-width: 760px;
+            border-collapse: collapse;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+
+        .stock-table th, .stock-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .stock-table th {
+            background: rgba(0, 0, 0, 0.18);
+        }
+
+        .stock-wrap {
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+        }
+
+        @media (max-width: 900px) {
+            .sidebar { width: 60px; padding: 20px 8px; }
+            .sidebar-logo { font-size: 0.9rem; text-align: center; }
+            .sidebar-btn span { display: none; }
+            .sidebar-section { display: none; }
+            .main-content { margin-left: 60px; max-width: calc(100% - 60px); padding: 24px 18px; }
+        }
+
+        @media (max-width: 720px) {
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .toolbar { width: 100%; justify-content: flex-start; }
+            .detail-grid { grid-template-columns: 1fr; }
+            .modal-actions { flex-direction: column; }
+        }
+    </style>
+    <link rel="stylesheet" href="css/dashboard-theme.css">
+</head>
+<body class="dashboard-shell">
+    <nav class="sidebar">
+        <div class="sidebar-logo">🛠️ Admin Panel</div>
+
+        <div class="sidebar-section">Navigation</div>
+        <button class="sidebar-btn" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
+        <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer Reports</span></button>
+        <button class="sidebar-btn active" onclick="location.href='/transfer-receipts'">📥 <span>Transfer Receipts</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pending-requests'">⏳ <span>Pending Requests</span></button>
+        <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
+        <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢 <span>Branches &amp; Houses</span></button>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Actions</div>
+        <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>All Requests</span></button>
+
+        <div style="flex:1;"></div>
+        <div class="sidebar-divider"></div>
+        <button class="sidebar-btn danger" onclick="logout()">🚪 <span>Logout</span></button>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="header-copy">
+                    <h1>Transfer Receipts</h1>
+                    <p>Browse incoming branch transfers and inspect the full receipt details.</p>
+                </div>
+                <div class="toolbar">
+                    <select id="branch-filter" class="filter-select" style="display:none;" onchange="loadReceipts()">
+                        <option value="">All Branches</option>
+                    </select>
+                    <select id="status-filter" class="filter-select" onchange="loadReceipts()">
+                        <option value="">All Statuses</option>
+                        <option value="submitted">Submitted</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="completed">Completed</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                    <button class="filter-select" style="cursor:pointer;" onclick="loadReceipts()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-pill">Incoming receipts <strong id="count-total">0</strong></div>
+                <div class="stat-pill">Selected branch <strong id="count-branch">Current</strong></div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Qty</th>
+                            <th>Truck</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="detail-modal" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+            <div class="modal-header">
+                <h2 id="detail-title">Transfer Receipt Detail</h2>
+                <button class="modal-close" onclick="closeModal()" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body" id="detail-body">
+                <div class="empty-state">Select a receipt to see details.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let auth = null;
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function formatDate(value) {
+            if (!value) return '-';
+            const d = new Date(value);
+            return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+        }
+
+        function normalizeStatus(status) {
+            return (status || 'pending').toLowerCase();
+        }
+
+        function normalizeReceiptStatus(status) {
+            return (status || 'pending').toLowerCase();
+        }
+
+        function openModal() {
+            const modal = document.getElementById('detail-modal');
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('detail-modal');
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        document.getElementById('detail-modal').addEventListener('click', (event) => {
+            if (event.target.id === 'detail-modal') closeModal();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeModal();
+        });
+
+        fetch('/api/check-auth')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.authenticated) {
+                    window.location.href = '/';
+                    return;
+                }
+                auth = data;
+
+                if (data.role === 'superadmin') {
+                    const btnBranches = document.getElementById('btn-branches');
+                    if (btnBranches) btnBranches.style.display = 'flex';
+                    loadBranches();
+                }
+
+                const branchLabel = document.getElementById('count-branch');
+                branchLabel.textContent = data.branch_id ? 'Current branch' : 'All';
+                loadReceipts();
+            });
+
+        async function loadBranches() {
+            try {
+                const response = await fetch('/api/branches');
+                const data = await response.json();
+                const select = document.getElementById('branch-filter');
+                select.innerHTML = '<option value="">All Branches</option>';
+                (data.branches || []).forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = `${branch.name} (${branch.code})`;
+                    select.appendChild(option);
+                });
+                select.style.display = 'inline-block';
+            } catch (err) {
+                console.error('Failed to load branches:', err);
+            }
+        }
+
+        async function loadReceipts() {
+            const tbody = document.getElementById('table-body');
+            const status = document.getElementById('status-filter').value;
+            const branchFilter = document.getElementById('branch-filter').value;
+
+            try {
+                const url = new URL('/api/transfer/receipts', window.location.origin);
+                if (status) url.searchParams.set('status', status);
+                if (branchFilter) url.searchParams.set('branch_id', branchFilter);
+                url.searchParams.set('_t', Date.now());
+
+                const response = await fetch(url.toString());
+                const data = await response.json();
+
+                if (!data.success || !Array.isArray(data.receipts)) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load receipts</td></tr>';
+                    document.getElementById('count-total').textContent = '0';
+                    return;
+                }
+
+                document.getElementById('count-total').textContent = data.receipts.length;
+                tbody.innerHTML = data.receipts.length
+                    ? data.receipts.map(receipt => {
+                        const statusClass = normalizeStatus(receipt.status);
+                        const receiptClass = normalizeReceiptStatus(receipt.receipt_status);
+                        const truckLabel = receipt.truck_no
+                            ? `${receipt.truck_no}${receipt.truck_note ? ` (${receipt.truck_note})` : ''}`
+                            : '-';
+                        return `
+                            <tr class="receipt-row" onclick="openReceipt(${receipt.id})">
+                                <td>#${receipt.id}</td>
+                                <td>
+                                    <div style="font-weight:700;color:var(--accent)">${escapeHtml(receipt.source_branch_name || '-')}</div>
+                                    <div style="font-size:0.8rem;color:var(--text2)">${escapeHtml(receipt.source_branch_code || '')}</div>
+                                </td>
+                                <td>
+                                    <div>${escapeHtml(receipt.destination_branch_name || '-')}</div>
+                                    <div style="font-size:0.8rem;color:var(--text2)">Destination Branch</div>
+                                </td>
+                                <td>${receipt.quantity || 1}</td>
+                                <td>${escapeHtml(truckLabel)}</td>
+                                <td>
+                                    <div><span class="status-badge ${statusClass}">${escapeHtml(receipt.status || 'pending')}</span></div>
+                                    <div style="margin-top:6px"><span class="status-badge ${receiptClass}">${escapeHtml(receipt.receipt_status || 'pending')}</span></div>
+                                </td>
+                                <td style="font-size:0.85rem">${escapeHtml(formatDate(receipt.created_at))}</td>
+                            </tr>
+                        `;
+                    }).join('')
+                    : '<tr><td colspan="7" class="empty-state">No incoming transfer receipts found</td></tr>';
+            } catch (err) {
+                console.error('Failed to load receipts:', err);
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Network error</td></tr>';
+                document.getElementById('count-total').textContent = '0';
+            }
+        }
+
+        async function openReceipt(id) {
+            const body = document.getElementById('detail-body');
+            body.innerHTML = '<div class="empty-state">Loading...</div>';
+            openModal();
+
+            try {
+                const response = await fetch(`/api/transfer/receipts/${id}?_t=${Date.now()}`);
+                const data = await response.json();
+
+                if (!data.success || !data.receipt) {
+                    body.innerHTML = `<div class="empty-state">${escapeHtml(data.error || 'Failed to load receipt')}</div>`;
+                    return;
+                }
+
+                const receipt = data.receipt;
+                const items = receipt.stock_items || [];
+                const truckLabel = receipt.truck_no ? `${receipt.truck_no}${receipt.truck_note ? ` (${receipt.truck_note})` : ''}` : '-';
+                const receiptStatus = normalizeReceiptStatus(receipt.receipt_status);
+                const isSuperadmin = auth && auth.role === 'superadmin';
+                const canMarkReceived = receiptStatus !== 'received' && (
+                    isSuperadmin || (auth && auth.branch_id && String(auth.branch_id) === String(receipt.destination_branch_id))
+                );
+
+                body.innerHTML = `
+                    <div class="detail-grid">
+                        <div class="detail-card"><strong>Receipt ID</strong><span>#${escapeHtml(receipt.id)}</span></div>
+                        <div class="detail-card"><strong>Status</strong><span><span class="status-badge ${normalizeStatus(receipt.status)}">${escapeHtml(receipt.status || 'pending')}</span></span></div>
+                        <div class="detail-card"><strong>Receipt Status</strong><span><span class="status-badge ${receiptStatus}">${escapeHtml(receipt.receipt_status || 'pending')}</span></span></div>
+                        <div class="detail-card"><strong>From</strong><span>${escapeHtml(receipt.source_branch_name || '-')} ${receipt.source_branch_code ? `(${escapeHtml(receipt.source_branch_code)})` : ''}</span></div>
+                        <div class="detail-card"><strong>To</strong><span>${escapeHtml(receipt.destination_branch_name || '-')} ${receipt.destination_branch_code ? `(${escapeHtml(receipt.destination_branch_code)})` : ''}</span></div>
+                        <div class="detail-card"><strong>Truck</strong><span>${escapeHtml(truckLabel)}</span></div>
+                        <div class="detail-card"><strong>Quantity</strong><span>${escapeHtml(receipt.quantity || 1)}</span></div>
+                        <div class="detail-card"><strong>Requested By</strong><span>${escapeHtml(receipt.requested_by_name || '-')}</span></div>
+                        <div class="detail-card"><strong>Created</strong><span>${escapeHtml(formatDate(receipt.created_at))}</span></div>
+                        <div class="detail-card"><strong>Updated</strong><span>${escapeHtml(formatDate(receipt.updated_at))}</span></div>
+                        <div class="detail-card"><strong>Received At</strong><span>${escapeHtml(formatDate(receipt.received_at))}</span></div>
+                        <div class="detail-card"><strong>Received By</strong><span>${escapeHtml(receipt.received_by_name || '-')}</span></div>
+                        <div class="detail-card"><strong>Notes</strong><span>${escapeHtml(receipt.notes || '-')}</span></div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-action btn-secondary" onclick="openPrintable(${receipt.id})">Print / Save PDF</button>
+                        ${canMarkReceived ? `<button class="btn-action btn-success" onclick="markReceived(${receipt.id})">Mark as Received</button>` : ''}
+                    </div>
+                    ${receiptStatus === 'received'
+                        ? '<div class="notice">This receipt has already been marked as received.</div>'
+                        : '<div class="notice warn">Use "Mark as Received" after the transfer physically arrives at your branch.</div>'
+                    }
+
+                    <h3 class="section-title">Transferred Items</h3>
+                    <div class="stock-wrap">
+                        <table class="stock-table">
+                            <thead>
+                                <tr>
+                                    <th>Stock ID</th>
+                                    <th>Batch</th>
+                                    <th>Expiry</th>
+                                    <th>Flavour</th>
+                                    <th>Rack</th>
+                                    <th>Shelf</th>
+                                    <th>Source Branch</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.length ? items.map(item => `
+                                    <tr>
+                                        <td>#${escapeHtml(item.stock_id || '-')}</td>
+                                        <td>${escapeHtml(item.batch_no || '-')}</td>
+                                        <td>${escapeHtml(item.expiry_date || '-')}</td>
+                                        <td>${escapeHtml(item.flavour || '-')}</td>
+                                        <td>${escapeHtml(item.rack_no || '-')}</td>
+                                        <td>${escapeHtml(item.shelf_no || '-')}</td>
+                                        <td>${escapeHtml(item.branch_name || '-')}${item.branch_code ? ` (${escapeHtml(item.branch_code)})` : ''}</td>
+                                    </tr>
+                                `).join('') : `<tr><td colspan="7" class="empty-state">No linked stock items found</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (err) {
+                console.error('Failed to load receipt detail:', err);
+                body.innerHTML = '<div class="empty-state">Network error</div>';
+            }
+        }
+
+        async function markReceived(id) {
+            if (!confirm('Mark this receipt as received?')) return;
+
+            try {
+                const response = await fetch(`/api/transfer/receipts/${id}/mark-received`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+
+                if (!result.success) {
+                    alert(result.error || 'Failed to mark as received');
+                    return;
+                }
+
+                await loadReceipts();
+                await openReceipt(id);
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        function openPrintable(id) {
+            const url = `/transfer-receipts/${id}/print`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' })
+                .then(() => window.location.href = '/');
+        }
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ Flask Backend for Label Scanner Authentication
 Uses SQLite3 for user management
 """
 
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify, send_from_directory, session, redirect
 from flask_cors import CORS
 import sqlite3
 import hashlib
@@ -33,6 +33,37 @@ CORS(app)
 GMAIL_SENDER = os.getenv('GMAIL_SENDER', '')
 GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
 
+PERMISSION_CATALOG = [
+    {'code': 'view_admin_dashboard', 'label': 'View Dashboard', 'group': 'dashboard', 'description': 'Open the main dashboard.'},
+    {'code': 'view_analytics', 'label': 'View Analytics', 'group': 'dashboard', 'description': 'Open analytics and expiry charts.'},
+    {'code': 'view_pivot', 'label': 'View Ledger Entries', 'group': 'dashboard', 'description': 'Open the ledger / pivot view.'},
+    {'code': 'view_scanner', 'label': 'Use Scanner', 'group': 'scanner', 'description': 'Open the scanner page.'},
+    {'code': 'sync_scans', 'label': 'Sync Scans', 'group': 'scanner', 'description': 'Sync uploaded scans.'},
+    {'code': 'manage_scans', 'label': 'Manage Scans', 'group': 'scanner', 'description': 'Add, update, import, or delete scans.'},
+    {'code': 'create_transfer', 'label': 'Create Transfers', 'group': 'transfers', 'description': 'Create transfer requests.'},
+    {'code': 'receive_transfer', 'label': 'Mark Received', 'group': 'transfers', 'description': 'Mark a transfer as received.'},
+    {'code': 'manage_transfers', 'label': 'Manage Transfer Status', 'group': 'transfers', 'description': 'Approve or update transfer status.'},
+    {'code': 'export_data', 'label': 'Export Data', 'group': 'admin', 'description': 'Export CSV data.'},
+]
+
+DEFAULT_PERMISSION_CODES = [perm['code'] for perm in PERMISSION_CATALOG]
+MANDATORY_PERMISSION_CODES = {'view_scanner', 'sync_scans'}
+
+ADMIN_ENDPOINT_PERMISSIONS = {
+    'admin_dashboard': 'view_admin_dashboard',
+    'get_analytics': 'view_analytics',
+    'get_expiry_forecast': 'view_analytics',
+    'get_expiry_items': 'view_analytics',
+    'sync_scans': 'sync_scans',
+    'export_data': 'export_data',
+    'update_scan': 'manage_scans',
+    'add_scan': 'manage_scans',
+    'import_csv': 'manage_scans',
+    'delete_scan': 'manage_scans',
+    'get_pivot_data': 'view_pivot',
+    'update_transfer_status': 'manage_transfers',
+}
+
 # --- Authentication Decorators ---
 
 def login_required(f):
@@ -48,7 +79,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
-        if session.get('role') not in ['admin', 'superadmin']:
+        if not _can_access_admin_endpoint(f.__name__):
             return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
         return f(*args, **kwargs)
     return decorated_function
@@ -71,8 +102,329 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def _ensure_permission_tables(cursor):
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            label TEXT NOT NULL,
+            description TEXT,
+            permission_group TEXT DEFAULT 'general',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+            granted_by INTEGER REFERENCES users(id),
+            granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, permission_id)
+        )
+    ''')
+
+    for perm in PERMISSION_CATALOG:
+        cursor.execute('''
+            INSERT INTO permissions (code, label, description, permission_group)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(code) DO UPDATE SET
+                label=excluded.label,
+                description=excluded.description,
+                permission_group=excluded.permission_group
+        ''', (perm['code'], perm['label'], perm['description'], perm['group']))
+
+    if DEFAULT_PERMISSION_CODES:
+        placeholders = ','.join(['?'] * len(DEFAULT_PERMISSION_CODES))
+        cursor.execute(f'DELETE FROM user_permissions WHERE permission_id NOT IN (SELECT id FROM permissions WHERE code IN ({placeholders}))', DEFAULT_PERMISSION_CODES)
+        cursor.execute(f'DELETE FROM permissions WHERE code NOT IN ({placeholders})', DEFAULT_PERMISSION_CODES)
+
+def _permission_lookup(cursor):
+    cursor.execute('SELECT id, code FROM permissions')
+    return {row['code']: row['id'] for row in cursor.fetchall()}
+
+def _grant_permissions(cursor, user_id, permission_codes, granted_by=None):
+    if not permission_codes:
+        return
+    lookup = _permission_lookup(cursor)
+    for code in permission_codes:
+        permission_id = lookup.get(code)
+        if permission_id:
+            cursor.execute('''
+                INSERT OR IGNORE INTO user_permissions (user_id, permission_id, granted_by)
+                VALUES (?, ?, ?)
+            ''', (user_id, permission_id, granted_by))
+
+def _ensure_default_permissions(cursor):
+    """Seed default permissions for users created before the permission system existed."""
+    lookup = _permission_lookup(cursor)
+    if not lookup:
+        return
+
+    cursor.execute('SELECT id, role FROM users WHERE role != "superadmin"')
+    users = cursor.fetchall()
+    for user in users:
+        cursor.execute('SELECT COUNT(*) AS count FROM user_permissions WHERE user_id = ?', (user['id'],))
+        has_any = cursor.fetchone()['count'] > 0
+        if not has_any:
+            for code in DEFAULT_PERMISSION_CODES:
+                permission_id = lookup.get(code)
+                if permission_id:
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO user_permissions (user_id, permission_id, granted_by)
+                        VALUES (?, ?, NULL)
+                    ''', (user['id'], permission_id))
+
+        for code in MANDATORY_PERMISSION_CODES:
+            permission_id = lookup.get(code)
+            if permission_id:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO user_permissions (user_id, permission_id, granted_by)
+                    VALUES (?, ?, NULL)
+                ''', (user['id'], permission_id))
+
+def get_user_permissions(user_id):
+    if not user_id:
+        return set()
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT p.code
+        FROM user_permissions up
+        JOIN permissions p ON p.id = up.permission_id
+        WHERE up.user_id = ?
+    ''', (user_id,))
+    perms = {row['code'] for row in cursor.fetchall()}
+    conn.close()
+    return perms
+
+def _can_access_permission(permission_code):
+    if session.get('role') == 'superadmin':
+        return True
+    if permission_code in MANDATORY_PERMISSION_CODES:
+        return True
+    if not session.get('user_id'):
+        return False
+    return permission_code in get_user_permissions(session.get('user_id'))
+
+def _can_access_admin_endpoint(endpoint_name):
+    required = ADMIN_ENDPOINT_PERMISSIONS.get(endpoint_name)
+    if not required:
+        return session.get('role') == 'superadmin'
+    return _can_access_permission(required)
+
+def _protected_page(filename, permission_code=None, redirect_to='/'):
+    if 'user_id' not in session:
+        return redirect(redirect_to)
+    if session.get('role') != 'superadmin' and permission_code and not _can_access_permission(permission_code):
+        return redirect(redirect_to)
+    return send_from_directory('.', filename)
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+def _table_has_column(cursor, table_name, column_name):
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return any(row['name'] == column_name for row in cursor.fetchall())
+
+def _get_or_create_stock_id(cursor, scan_data, branch_id):
+    """Return a stock row ID for the supplied item identity, creating it if needed."""
+    batch_no = scan_data.get('batch_no') or scan_data.get('batchNo', '')
+    mfg_date = scan_data.get('mfg_date') or scan_data.get('mfgDate', '')
+    expiry_date = scan_data.get('expiry_date') or scan_data.get('expiryDate', '')
+    flavour = scan_data.get('flavour', '')
+    rack_no = scan_data.get('rack_no') or scan_data.get('rackNo', '')
+    shelf_no = scan_data.get('shelf_no') or scan_data.get('shelfNo', '')
+
+    cursor.execute('''
+        SELECT id FROM stock
+        WHERE batch_no = ? AND mfg_date = ? AND expiry_date = ? AND flavour = ?
+          AND rack_no = ? AND shelf_no = ? AND branch_id IS ?
+    ''', (batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute('''
+            UPDATE stock
+            SET updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (row['id'],))
+        return row['id']
+
+    cursor.execute('''
+        INSERT INTO stock (
+            batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id))
+    return cursor.lastrowid
+
+def _get_or_create_production_room_id(cursor, branch_id, room_name='Production Room'):
+    """Return a production room id for a branch, creating a default room if needed."""
+    cursor.execute('''
+        SELECT id FROM production_rooms
+        WHERE branch_id = ? AND name = ?
+    ''', (branch_id, room_name))
+    row = cursor.fetchone()
+    if row:
+        return row['id']
+
+    cursor.execute('''
+        INSERT INTO production_rooms (name, branch_id)
+        VALUES (?, ?)
+    ''', (room_name, branch_id))
+    return cursor.lastrowid
+
+def _record_production_stock(cursor, transfer_request_id, stock_ids, production_room_id):
+    """Create one production-stock row per selected stock item."""
+    if not stock_ids or not production_room_id:
+        return False
+
+    for stock_id in stock_ids:
+        cursor.execute('''
+            INSERT OR IGNORE INTO production_stock (
+                transfer_request_id, stock_id, production_room_id
+            ) VALUES (?, ?, ?)
+        ''', (transfer_request_id, stock_id, production_room_id))
+    return True
+
+def _ensure_transfer_request_columns(cursor):
+    """Add newer transfer request columns when upgrading older SQLite databases."""
+    if not _table_has_column(cursor, 'transfer_requests', 'destination_type'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN destination_type TEXT DEFAULT 'production_room'"
+        )
+    if not _table_has_column(cursor, 'transfer_requests', 'destination_branch_id'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN destination_branch_id INTEGER REFERENCES branches(id)"
+        )
+    if not _table_has_column(cursor, 'transfer_requests', 'truck_id'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN truck_id INTEGER REFERENCES trucks(id)"
+        )
+    if not _table_has_column(cursor, 'transfer_requests', 'receipt_status'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN receipt_status TEXT DEFAULT 'pending'"
+        )
+    if not _table_has_column(cursor, 'transfer_requests', 'received_at'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN received_at DATETIME"
+        )
+    if not _table_has_column(cursor, 'transfer_requests', 'received_by'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN received_by INTEGER REFERENCES users(id)"
+        )
+    if not _table_has_column(cursor, 'transfer_requests', 'received_by_name'):
+        cursor.execute(
+            "ALTER TABLE transfer_requests ADD COLUMN received_by_name TEXT"
+        )
+
+def _ensure_truck_table(cursor):
+    """Create the truck lookup table used by transfer requests."""
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS trucks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            truck_no TEXT UNIQUE NOT NULL,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+def _ensure_inventory_tables(cursor):
+    """Create inventory tables used by the sync endpoints if they do not exist."""
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_no TEXT,
+            mfg_date TEXT,
+            expiry_date TEXT,
+            flavour TEXT,
+            rack_no TEXT,
+            shelf_no TEXT,
+            branch_id INTEGER REFERENCES branches(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_id INTEGER REFERENCES stock(id),
+            timestamp TEXT,
+            batch_no TEXT,
+            mfg_date TEXT,
+            expiry_date TEXT,
+            flavour TEXT,
+            rack_no TEXT,
+            shelf_no TEXT,
+            movement TEXT DEFAULT 'IN',
+            synced_by TEXT,
+            branch_id INTEGER,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True):
+    """Shared scan sync implementation for both user and admin endpoints."""
+    if replace:
+        cursor.execute('DELETE FROM scans')
+        cursor.execute('DELETE FROM stock')
+
+    synced = 0
+    for scan in scans:
+        stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
+        movement = scan.get('movement', 'IN')
+        timestamp = scan.get('timestamp', '')
+
+        if not replace:
+            # Skip duplicate sync submissions from the device.
+            cursor.execute('''
+                SELECT id FROM scans
+                WHERE stock_id = ? AND movement = ? AND timestamp = ?
+            ''', (stock_id, movement, timestamp))
+            if cursor.fetchone():
+                continue
+
+            if validate_out and movement == 'OUT':
+                cursor.execute('''
+                    SELECT movement FROM scans
+                    WHERE stock_id = ?
+                ''', (stock_id,))
+                stock_rows = cursor.fetchall()
+                in_count = sum(1 for r in stock_rows if r['movement'] == 'IN')
+                out_count = sum(1 for r in stock_rows if r['movement'] == 'OUT')
+
+                if in_count <= out_count:
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Stock Error: No available stock found for Batch {scan.get('batchNo')} "
+                            f"({scan.get('flavour')}) at this location."
+                        )
+                    }
+
+        cursor.execute('''
+            INSERT INTO scans (
+                stock_id, timestamp, batch_no, mfg_date, expiry_date,
+                flavour, rack_no, shelf_no, movement, synced_by, branch_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            stock_id,
+            timestamp,
+            scan.get('batchNo', ''),
+            scan.get('mfgDate', ''),
+            scan.get('expiryDate', ''),
+            scan.get('flavour', ''),
+            scan.get('rackNo', ''),
+            scan.get('shelfNo', ''),
+            movement,
+            user,
+            branch_id
+        ))
+        synced += 1
+
+    return {'success': True, 'synced': synced}
 
 # --- SQLite-backed OTP helpers (survive server restarts) ---
 
@@ -134,6 +486,16 @@ def init_db():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS production_rooms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            branch_id INTEGER REFERENCES branches(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(branch_id, name)
+        )
+    ''')
     
     # Create users table with branch_id and email
     cursor.execute('''
@@ -148,11 +510,29 @@ def init_db():
             email TEXT
         )
     ''')
+
+    # Create stock table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_no TEXT,
+            mfg_date TEXT,
+            expiry_date TEXT,
+            flavour TEXT,
+            rack_no TEXT,
+            shelf_no TEXT,
+            branch_id INTEGER REFERENCES branches(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id)
+        )
+    ''')
     
     # Create scans table with branch_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_id INTEGER REFERENCES stock(id),
             timestamp TEXT,
             batch_no TEXT,
             mfg_date TEXT,
@@ -167,45 +547,63 @@ def init_db():
         )
     ''')
 
+    _ensure_truck_table(cursor)
+
     # Create transfer_requests table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS transfer_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            scan_id INTEGER,
-            batch_no TEXT,
-            flavour TEXT,
-            expiry_date TEXT,
-            rack_no TEXT,
-            shelf_no TEXT,
+            quantity INTEGER NOT NULL DEFAULT 1,
             requested_by INTEGER REFERENCES users(id),
             requested_by_name TEXT,
-            status TEXT DEFAULT 'pending',
+            source_branch_id INTEGER REFERENCES branches(id),
+            destination_type TEXT DEFAULT 'production_room',
+            destination_branch_id INTEGER REFERENCES branches(id),
+            production_room_id INTEGER REFERENCES production_rooms(id),
+            truck_id INTEGER REFERENCES trucks(id),
+            status TEXT DEFAULT 'submitted',
+            receipt_status TEXT DEFAULT 'pending',
+            received_at DATETIME,
+            received_by INTEGER REFERENCES users(id),
+            received_by_name TEXT,
             notes TEXT,
-            branch_id INTEGER REFERENCES branches(id),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
-    # Migration: Add columns and tables if they don't exist
-    for migration in [
-        'ALTER TABLE users ADD COLUMN branch_id INTEGER',
-        'ALTER TABLE users ADD COLUMN email TEXT',
-        'ALTER TABLE scans ADD COLUMN branch_id INTEGER',
-        'ALTER TABLE scans ADD COLUMN synced_by TEXT',
-        '''CREATE TABLE IF NOT EXISTS otp_store (
-            username TEXT PRIMARY KEY,
-            otp TEXT NOT NULL,
-            expires REAL NOT NULL,
-            sent_at REAL NOT NULL,
-            attempts INTEGER DEFAULT 0
-        )''',
-    ]:
-        try:
-            cursor.execute(migration)
-        except:
-            pass
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS production_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transfer_request_id INTEGER NOT NULL REFERENCES transfer_requests(id),
+            stock_id INTEGER NOT NULL REFERENCES stock(id),
+            production_room_id INTEGER NOT NULL REFERENCES production_rooms(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS IX_production_stock_room_created_at
+        ON production_stock (production_room_id, created_at DESC)
+    ''')
+
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS IX_production_stock_transfer_request
+        ON production_stock (transfer_request_id)
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS allowed_ips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL DEFAULT 'Unnamed Network',
+            added_by TEXT DEFAULT 'system',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    _ensure_permission_tables(cursor)
+    
     # Set temp emails for existing users who have none
     cursor.execute("SELECT id, username FROM users WHERE email IS NULL OR email = ''")
     users_no_email = cursor.fetchall()
@@ -231,19 +629,21 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         users = [
             ('superadmin', hash_password('super123'), 'Super Admin', 'superadmin', None, 'superadmin@temp.labelscan.local'),
-            ('admin', hash_password('admin123'), 'Administrator', 'admin', default_branch_id, 'admin@temp.labelscan.local'),
             ('user1', hash_password('user123'), 'User One', 'user', default_branch_id, 'user1@temp.labelscan.local')
         ]
         cursor.executemany(
             'INSERT INTO users (username, password, name, role, branch_id, email) VALUES (?, ?, ?, ?, ?, ?)',
             users
         )
-        print('Default users created: superadmin / admin / user1')
+        print('Default users created: superadmin / user1')
     
-    # Upgrade existing admin to superadmin if no superadmin exists
-    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'superadmin'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("UPDATE users SET role = 'superadmin', branch_id = NULL WHERE username = 'admin'")
+    # Upgrade any legacy admin accounts to superadmin.
+    cursor.execute("UPDATE users SET role = 'superadmin', branch_id = NULL WHERE role = 'admin'")
+
+    # Seed default permissions for existing non-superadmin users.
+    _ensure_default_permissions(cursor)
+
+    _ensure_transfer_request_columns(cursor)
     
     conn.commit()
     conn.close()
@@ -276,7 +676,7 @@ def login():
     
     if user:
         if user['active'] == 0:
-            return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
+            return jsonify({'success': False, 'error': 'Account pending superadmin approval'}), 401
         
         # Set session
         session['user_id'] = user['id']
@@ -284,6 +684,7 @@ def login():
         session['role'] = user['role']
         session['branch_id'] = user['branch_id']
         session.permanent = True
+        permissions = sorted(get_user_permissions(user['id']))
         
         return jsonify({
             'success': True,
@@ -294,8 +695,10 @@ def login():
                 'role': user['role'],
                 'branch_id': user['branch_id'],
                 'branch_name': user['branch_name'] or 'All Branches',
-                'branch_code': user['branch_code'] or 'ALL'
-            }
+                'branch_code': user['branch_code'] or 'ALL',
+                'permissions': permissions
+            },
+            'permissions': permissions
         })
     else:
         return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
@@ -364,7 +767,7 @@ def get_login_method():
         return jsonify({'success': False, 'error': 'No account found with that username or email'}), 404
 
     if user['active'] == 0:
-        return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
+        return jsonify({'success': False, 'error': 'Account pending superadmin approval'}), 401
 
     role = user['role']
     email = user['email'] or ''
@@ -383,7 +786,7 @@ def get_login_method():
         'username': user['username'],  # resolved canonical username
         'role': role,
         'masked_email': masked,
-        'allow_password': role in ('admin', 'superadmin'),
+        'allow_password': role == 'superadmin',
         'allow_otp': has_real_email
     })
 
@@ -407,11 +810,11 @@ def send_otp():
     if not user:
         return jsonify({'success': False, 'error': 'No account found with that username or email'}), 404
     if user['active'] == 0:
-        return jsonify({'success': False, 'error': 'Account pending admin approval'}), 401
+        return jsonify({'success': False, 'error': 'Account pending superadmin approval'}), 401
 
     email = user['email'] or ''
     if not email or '@' not in email or email.endswith('@temp.labelscan.local'):
-        return jsonify({'success': False, 'error': 'No email on file. Contact your admin.'}), 400
+        return jsonify({'success': False, 'error': 'No email on file. Contact your superadmin.'}), 400
 
     # Use canonical username as OTP key
     canon = user['username']
@@ -478,6 +881,7 @@ def verify_otp():
     session['role'] = user['role']
     session['branch_id'] = user['branch_id']
     session.permanent = True
+    permissions = sorted(get_user_permissions(user['id']))
 
     return jsonify({
         'success': True,
@@ -488,8 +892,10 @@ def verify_otp():
             'role': user['role'],
             'branch_id': user['branch_id'],
             'branch_name': user['branch_name'] or 'All Branches',
-            'branch_code': user['branch_code'] or 'ALL'
-        }
+            'branch_code': user['branch_code'] or 'ALL',
+            'permissions': permissions
+        },
+        'permissions': permissions
     })
 
 
@@ -513,6 +919,114 @@ def update_user_email():
     conn.close()
     return jsonify({'success': True})
 
+@app.route('/api/admin/permissions', methods=['GET'])
+@superadmin_required
+def list_permissions():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, code, label, description, permission_group FROM permissions ORDER BY permission_group, label')
+    permissions = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'success': True, 'permissions': permissions})
+
+@app.route('/api/admin/authorizations', methods=['GET'])
+@superadmin_required
+def list_authorizations():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name, b.code as branch_code
+        FROM users u
+        LEFT JOIN branches b ON u.branch_id = b.id
+        ORDER BY u.role DESC, u.name
+    ''')
+    users = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute('SELECT id, code, label, description, permission_group FROM permissions ORDER BY permission_group, label')
+    permissions = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute('''
+        SELECT up.user_id, p.code
+        FROM user_permissions up
+        JOIN permissions p ON p.id = up.permission_id
+    ''')
+    assignments = {}
+    for row in cursor.fetchall():
+        assignments.setdefault(row['user_id'], []).append(row['code'])
+
+    for user in users:
+        user['permissions'] = assignments.get(user['id'], [])
+
+    conn.close()
+    return jsonify({'success': True, 'users': users, 'permissions': permissions})
+
+@app.route('/api/admin/users/<int:user_id>/permissions', methods=['GET', 'PUT'])
+@superadmin_required
+def manage_user_permissions(user_id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT id, username, role FROM users WHERE id = ?', (user_id,))
+    target = cursor.fetchone()
+    if not target:
+        conn.close()
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if request.method == 'GET':
+        cursor.execute('''
+            SELECT p.code
+            FROM user_permissions up
+            JOIN permissions p ON p.id = up.permission_id
+            WHERE up.user_id = ?
+            ORDER BY p.permission_group, p.label
+        ''', (user_id,))
+        permissions = [row['code'] for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'success': True, 'user_id': user_id, 'permissions': permissions})
+
+    if target['role'] == 'superadmin':
+        conn.close()
+        return jsonify({'success': False, 'error': 'Superadmin permissions are implicit'}), 400
+
+    data = request.get_json() or {}
+    requested = data.get('permissions', [])
+    if not isinstance(requested, list):
+        conn.close()
+        return jsonify({'success': False, 'error': 'permissions must be a list'}), 400
+
+    normalized = []
+    seen = set()
+    for code in requested:
+        code = str(code).strip()
+        if code and code not in seen:
+            normalized.append(code)
+            seen.add(code)
+
+    for code in MANDATORY_PERMISSION_CODES:
+        if code not in seen:
+            normalized.append(code)
+            seen.add(code)
+
+    cursor.execute('SELECT id, code FROM permissions')
+    permission_rows = cursor.fetchall()
+    permission_lookup = {row['code']: row['id'] for row in permission_rows}
+
+    invalid = [code for code in normalized if code not in permission_lookup]
+    if invalid:
+        conn.close()
+        return jsonify({'success': False, 'error': f'Invalid permissions: {", ".join(invalid)}'}), 400
+
+    cursor.execute('DELETE FROM user_permissions WHERE user_id = ?', (user_id,))
+    for code in normalized:
+        cursor.execute('''
+            INSERT INTO user_permissions (user_id, permission_id, granted_by)
+            VALUES (?, ?, ?)
+        ''', (user_id, permission_lookup[code], session.get('user_id')))
+
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'permissions': normalized})
+
 @app.route('/api/check-auth', methods=['GET'])
 def check_auth():
     """Lightweight auth status endpoint for frontend guards."""
@@ -524,7 +1038,8 @@ def check_auth():
         'user_id': session.get('user_id'),
         'username': session.get('username'),
         'role': session.get('role'),
-        'branch_id': session.get('branch_id')
+        'branch_id': session.get('branch_id'),
+        'permissions': sorted(get_user_permissions(session.get('user_id')))
     })
 
 @app.route('/api/register', methods=['POST'])
@@ -534,7 +1049,6 @@ def register():
     username = data.get('username', '').strip()
     password = data.get('password', '')
     email = data.get('email', '').strip().lower()
-    role = data.get('role', 'user')
     branch_id = data.get('branch_id')
     
     if not username or not password:
@@ -552,8 +1066,7 @@ def register():
     if not branch_id:
         return jsonify({'success': False, 'error': 'Please select a branch'}), 400
     
-    if role not in ['user', 'admin']:
-        role = 'user'
+    role = 'user'
     
     conn = get_db()
     cursor = conn.cursor()
@@ -573,11 +1086,12 @@ def register():
         INSERT INTO users (username, password, name, role, branch_id, email, active)
         VALUES (?, ?, ?, ?, ?, ?, 0)
     ''', (username, password_hash, username.title(), role, branch_id, email))
+    _grant_permissions(cursor, cursor.lastrowid, DEFAULT_PERMISSION_CODES)
     
     conn.commit()
     conn.close()
     
-    return jsonify({'success': True, 'message': 'Account created! Awaiting admin approval.'})
+    return jsonify({'success': True, 'message': 'Account created! Awaiting superadmin approval.'})
 
 @app.route('/api/branches', methods=['GET'])
 def list_branches():
@@ -588,6 +1102,32 @@ def list_branches():
     branches = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'branches': branches})
+
+@app.route('/api/production-rooms', methods=['GET'])
+@login_required
+def list_production_rooms():
+    """List production rooms, optionally filtered by branch."""
+    branch_id = request.args.get('branch_id', type=int)
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = '''
+        SELECT pr.id, pr.name, pr.branch_id, b.name as branch_name, b.code as branch_code
+        FROM production_rooms pr
+        LEFT JOIN branches b ON pr.branch_id = b.id
+    '''
+    params = []
+    if branch_id:
+        query += ' WHERE pr.branch_id = ?'
+        params.append(branch_id)
+    query += ' ORDER BY b.name, pr.name'
+
+    cursor.execute(query, params)
+    rooms = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return jsonify({'success': True, 'rooms': rooms})
 
 @app.route('/api/admin/branches', methods=['GET', 'POST'])
 @superadmin_required
@@ -606,8 +1146,9 @@ def manage_branches():
         
         try:
             cursor.execute('INSERT INTO branches (name, code) VALUES (?, ?)', (name, code))
-            conn.commit()
             branch_id = cursor.lastrowid
+            _get_or_create_production_room_id(cursor, branch_id)
+            conn.commit()
             conn.close()
             return jsonify({'success': True, 'id': branch_id})
         except:
@@ -618,12 +1159,134 @@ def manage_branches():
     cursor.execute('''
         SELECT b.id, b.name, b.code, 
                (SELECT COUNT(*) FROM users WHERE branch_id = b.id) as user_count,
-               (SELECT COUNT(*) FROM scans WHERE branch_id = b.id) as scan_count
+               (SELECT COUNT(*) FROM scans WHERE branch_id = b.id) as scan_count,
+               (SELECT COUNT(*) FROM production_rooms WHERE branch_id = b.id) as production_house_count
         FROM branches b ORDER BY b.name
     ''')
     branches = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'branches': branches})
+
+@app.route('/api/admin/branches/<int:branch_id>', methods=['DELETE'])
+@superadmin_required
+def delete_branch(branch_id):
+    """Superadmin: Delete a branch if it has no dependent records."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT id, name, code FROM branches WHERE id = ?', (branch_id,))
+    branch = cursor.fetchone()
+    if not branch:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Branch not found'}), 404
+
+    dependency_checks = [
+        ('users', 'SELECT COUNT(*) AS count FROM users WHERE branch_id = ?', (branch_id,), 'users'),
+        ('scans', 'SELECT COUNT(*) AS count FROM scans WHERE branch_id = ?', (branch_id,), 'scans'),
+        ('stock', 'SELECT COUNT(*) AS count FROM stock WHERE branch_id = ?', (branch_id,), 'stock records'),
+        ('production_rooms', 'SELECT COUNT(*) AS count FROM production_rooms WHERE branch_id = ?', (branch_id,), 'production houses'),
+        (
+            'transfer_requests_source',
+            'SELECT COUNT(*) AS count FROM transfer_requests WHERE source_branch_id = ? OR destination_branch_id = ?',
+            (branch_id, branch_id),
+            'transfer requests',
+        ),
+    ]
+
+    for _, query, params, label in dependency_checks:
+        cursor.execute(query, params)
+        count = cursor.fetchone()['count']
+        if count:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': f'Cannot delete branch while it still has {count} linked {label}'
+            }), 400
+
+    cursor.execute('DELETE FROM branches WHERE id = ?', (branch_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/production-houses', methods=['GET', 'POST'])
+@superadmin_required
+def manage_production_houses():
+    """Superadmin: List or create production houses."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'POST':
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        branch_id = data.get('branch_id')
+
+        if not name or not branch_id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Name and branch are required'}), 400
+
+        try:
+            branch_id = int(branch_id)
+        except (TypeError, ValueError):
+            conn.close()
+            return jsonify({'success': False, 'error': 'Invalid branch selected'}), 400
+
+        cursor.execute('SELECT id FROM branches WHERE id = ?', (branch_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': 'Branch not found'}), 404
+
+        try:
+            cursor.execute(
+                'INSERT INTO production_rooms (name, branch_id) VALUES (?, ?)',
+                (name, branch_id)
+            )
+            conn.commit()
+            room_id = cursor.lastrowid
+            conn.close()
+            return jsonify({'success': True, 'id': room_id})
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Production house already exists for this branch'}), 400
+
+    cursor.execute('''
+        SELECT pr.id, pr.name, pr.branch_id, b.name as branch_name, b.code as branch_code,
+               (SELECT COUNT(*) FROM transfer_requests WHERE production_room_id = pr.id) as transfer_count,
+               (SELECT COUNT(*) FROM production_stock WHERE production_room_id = pr.id) as production_stock_count
+        FROM production_rooms pr
+        LEFT JOIN branches b ON pr.branch_id = b.id
+        ORDER BY b.name, pr.name
+    ''')
+    rooms = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'production_houses': rooms})
+
+@app.route('/api/admin/production-houses/<int:room_id>', methods=['DELETE'])
+@superadmin_required
+def delete_production_house(room_id):
+    """Superadmin: Delete a production house if it has no dependencies."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT id, name, branch_id FROM production_rooms WHERE id = ?', (room_id,))
+    room = cursor.fetchone()
+    if not room:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Production house not found'}), 404
+
+    cursor.execute('SELECT COUNT(*) AS count FROM transfer_requests WHERE production_room_id = ?', (room_id,))
+    if cursor.fetchone()['count']:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Cannot delete a production house that is used by transfer requests'}), 400
+
+    cursor.execute('SELECT COUNT(*) AS count FROM production_stock WHERE production_room_id = ?', (room_id,))
+    if cursor.fetchone()['count']:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Cannot delete a production house that still has production stock records'}), 400
+
+    cursor.execute('DELETE FROM production_rooms WHERE id = ?', (room_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
 
 @app.route('/api/users', methods=['GET'])
 @admin_required
@@ -676,6 +1339,7 @@ def approve_user():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET active = 1 WHERE id = ?', (user_id,))
+    _grant_permissions(cursor, user_id, DEFAULT_PERMISSION_CODES)
     conn.commit()
     conn.close()
     
@@ -749,6 +1413,7 @@ def admin_dashboard():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_id INTEGER REFERENCES stock(id),
             timestamp TEXT,
             batch_no TEXT,
             mfg_date TEXT,
@@ -1156,6 +1821,8 @@ def get_expiry_items():
 @login_required
 def sync_user_scans():
     """Sync user scan data to central database (adds, doesn't replace)"""
+    if not _can_access_permission('sync_scans'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     data = request.get_json()
     scans = data.get('scans', [])
     user = data.get('user', 'Unknown')
@@ -1172,113 +1839,27 @@ def sync_user_scans():
     
     if not scans:
         return jsonify({'success': False, 'error': 'No scans provided'}), 400
-    
+
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Create table if not exists
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS scans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            batch_no TEXT,
-            mfg_date TEXT,
-            expiry_date TEXT,
-            flavour TEXT,
-            rack_no TEXT,
-            shelf_no TEXT,
-            movement TEXT DEFAULT 'IN',
-            synced_by TEXT,
-            branch_id INTEGER,
-            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Add new scans with branch_id (avoiding duplicates)
-    synced = 0
-    for scan in scans:
-        # Check if scan already exists (same product at same location with same movement)
-        cursor.execute('''
-            SELECT id FROM scans 
-            WHERE batch_no = ? AND mfg_date = ? AND expiry_date = ? AND rack_no = ? AND shelf_no = ? AND movement = ?
-        ''', (
-            scan.get('batchNo', ''),
-            scan.get('mfgDate', ''),
-            scan.get('expiryDate', ''),
-            scan.get('rackNo', ''),
-            scan.get('shelfNo', ''),
-            scan.get('movement', 'IN')
-        ))
-        
-        if cursor.fetchone():
-            continue # Skip duplicate
+    _ensure_inventory_tables(cursor)
 
-        # Validation for OUT scans: Check if stock exists
-        if scan.get('movement') == 'OUT':
-            cursor.execute('''
-                SELECT movement FROM scans 
-                WHERE batch_no = ? AND flavour = ? 
-                AND mfg_date = ? AND expiry_date = ?
-                AND rack_no = ? AND shelf_no = ?
-            ''', (
-                scan.get('batchNo', ''),
-                scan.get('flavour', ''),
-                scan.get('mfgDate', ''),
-                scan.get('expiryDate', ''),
-                scan.get('rackNo', ''),
-                scan.get('shelfNo', '')
-            ))
-            
-            stock_rows = cursor.fetchall()
-            in_count = sum(1 for r in stock_rows if r['movement'] == 'IN')
-            out_count = sum(1 for r in stock_rows if r['movement'] == 'OUT')
-            
-            if in_count <= out_count:
-                conn.close()
-                return jsonify({
-                    'success': False, 
-                    'error': f"Stock Error: No available stock found for Batch {scan.get('batchNo')} ({scan.get('flavour')}) at this location."
-                }), 400
+    result = _sync_scans_to_db(
+        cursor,
+        scans,
+        user=user,
+        branch_id=branch_id,
+        replace=False,
+        validate_out=True
+    )
+    if not result['success']:
+        conn.close()
+        return jsonify(result), 400
 
-        cursor.execute('''
-            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            scan.get('timestamp', ''),
-            scan.get('batchNo', ''),
-            scan.get('mfgDate', ''),
-            scan.get('expiryDate', ''),
-            scan.get('flavour', ''),
-            scan.get('rackNo', ''),
-            scan.get('shelfNo', ''),
-            scan.get('movement', 'IN'),
-            user,
-            branch_id
-        ))
-        synced += 1
-        
-        # Check if this is an OUT scan matching a transfer request
-        if scan.get('movement') == 'OUT':
-            # Find matching submitted request
-            cursor.execute('''
-                SELECT id FROM transfer_requests 
-                WHERE batch_no = ? AND flavour = ? AND rack_no = ? AND shelf_no = ? AND status = 'submitted'
-            ''', (
-                scan.get('batchNo', ''),
-                scan.get('flavour', ''),
-                scan.get('rackNo', ''),
-                scan.get('shelfNo', '')
-            ))
-            
-            req = cursor.fetchone()
-            if req:
-                # Mark as completed
-                cursor.execute('UPDATE transfer_requests SET status = "completed", updated_at = CURRENT_TIMESTAMP WHERE id = ?', (req['id'],))
-    
     conn.commit()
     conn.close()
     
-    return jsonify({'success': True, 'synced': synced})
+    return jsonify(result)
 
 @app.route('/api/admin/sync', methods=['POST'])
 @admin_required
@@ -1289,45 +1870,21 @@ def sync_scans():
     
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Create table if not exists
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS scans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            batch_no TEXT,
-            mfg_date TEXT,
-            expiry_date TEXT,
-            flavour TEXT,
-            rack_no TEXT,
-            shelf_no TEXT,
-            movement TEXT DEFAULT 'IN',
-            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Clear existing and insert new
-    cursor.execute('DELETE FROM scans')
-    
-    for scan in scans:
-        cursor.execute('''
-            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            scan.get('timestamp', ''),
-            scan.get('batchNo', ''),
-            scan.get('mfgDate', ''),
-            scan.get('expiryDate', ''),
-            scan.get('flavour', ''),
-            scan.get('rackNo', ''),
-            scan.get('shelfNo', ''),
-            scan.get('movement', 'IN')
-        ))
-    
+    _ensure_inventory_tables(cursor)
+
+    result = _sync_scans_to_db(
+        cursor,
+        scans,
+        user=data.get('user', 'Unknown'),
+        branch_id=None,
+        replace=True,
+        validate_out=False
+    )
+
     conn.commit()
     conn.close()
     
-    return jsonify({'success': True, 'synced': len(scans)})
+    return jsonify(result)
 
 @app.route('/api/admin/export', methods=['GET'])
 @admin_required
@@ -1404,11 +1961,25 @@ def update_scan():
     cursor = conn.cursor()
     
     cursor.execute('''
+        SELECT branch_id FROM scans WHERE id = ?
+    ''', (
+        scan_id,
+    ))
+    current = cursor.fetchone()
+    branch_id = current['branch_id'] if current else None
+
+    stock_id = _get_or_create_stock_id(cursor, data, branch_id)
+
+    cursor.execute('''
         UPDATE scans 
-        SET batch_no = ?, rack_no = ?, shelf_no = ?, movement = ?
+        SET stock_id = ?, batch_no = ?, mfg_date = ?, expiry_date = ?, flavour = ?, rack_no = ?, shelf_no = ?, movement = ?
         WHERE id = ?
     ''', (
+        stock_id,
         data.get('batch_no', ''),
+        data.get('mfg_date', ''),
+        data.get('expiry_date', ''),
+        data.get('flavour', ''),
         data.get('rack_no', ''),
         data.get('shelf_no', ''),
         data.get('movement', 'IN'),
@@ -1433,9 +2004,10 @@ def add_scan():
     timestamp = datetime.now().strftime('%d/%m/%Y, %I:%M:%S %p')
     
     cursor.execute('''
-        INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (stock_id, timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
+        _get_or_create_stock_id(cursor, data, data.get('branch_id')),
         timestamp,
         data.get('batch_no', ''),
         data.get('mfg_date', ''),
@@ -1473,10 +2045,12 @@ def import_csv():
     
     imported = 0
     for scan in scans:
+        stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
         cursor.execute('''
-            INSERT INTO scans (timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO scans (stock_id, timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
+            stock_id,
             timestamp,
             scan.get('batch_no', ''),
             scan.get('mfg_date', ''),
@@ -1499,6 +2073,8 @@ def import_csv():
 @login_required
 def proxy_ocr():
     """Proxy OCR requests to hide API Key"""
+    if not _can_access_permission('view_scanner'):
+        return jsonify({'error': 'Access denied'}), 403
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
         
@@ -1553,7 +2129,7 @@ def delete_scan():
 
 @app.route('/admin')
 def serve_admin():
-    return send_from_directory('.', 'admin.html')
+    return _protected_page('admin.html', 'view_admin_dashboard')
 
 # Serve static files
 @app.route('/')
@@ -1562,23 +2138,39 @@ def serve_index():
 
 @app.route('/app')
 def serve_app():
-    return send_from_directory('.', 'index.html')
+    return _protected_page('index.html', 'view_scanner')
 
 @app.route('/analytics')
 def serve_analytics():
-    return send_from_directory('.', 'analytics.html')
+    return _protected_page('analytics.html', 'view_analytics')
 
 @app.route('/branches')
 def serve_branches():
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin':
+        return redirect('/app')
     return send_from_directory('.', 'branches.html')
 
 @app.route('/scanned')
 def serve_scanned():
-    return send_from_directory('.', 'scanned.html')
+    return _protected_page('scanned.html', 'view_scanner')
 
 @app.route('/users')
 def serve_users():
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin':
+        return redirect('/app')
     return send_from_directory('.', 'users.html')
+
+@app.route('/authorizations')
+def serve_authorizations():
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin':
+        return redirect('/app')
+    return send_from_directory('.', 'authorizations.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -1586,7 +2178,7 @@ def serve_static(path):
 
 @app.route('/pivot')
 def serve_pivot():
-    return send_from_directory('.', 'pivot.html')
+    return _protected_page('pivot.html', 'view_pivot')
 
 @app.route('/api/admin/pivot', methods=['GET'])
 @admin_required
@@ -1602,15 +2194,16 @@ def get_pivot_data():
         SELECT s.id, s.timestamp, s.batch_no, s.mfg_date, s.expiry_date, 
                s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id, 
                s.synced_by, b.name as branch_name,
-               tr.requested_by_name
+               tr.requested_by_name,
+               tr.source_branch_id, tr.production_room_id,
+               sb.name as source_branch_name,
+               pr.name as production_room_name
         FROM scans s
         LEFT JOIN branches b ON s.branch_id = b.id
-        LEFT JOIN transfer_requests tr ON 
-            tr.batch_no = s.batch_no AND 
-            tr.flavour = s.flavour AND 
-            tr.rack_no = s.rack_no AND 
-            tr.shelf_no = s.shelf_no AND
-            s.movement = 'OUT'
+        LEFT JOIN production_stock ps ON ps.stock_id = s.stock_id
+        LEFT JOIN transfer_requests tr ON tr.id = ps.transfer_request_id
+        LEFT JOIN branches sb ON tr.source_branch_id = sb.id
+        LEFT JOIN production_rooms pr ON tr.production_room_id = pr.id
     '''
     params = []
     
@@ -1630,28 +2223,59 @@ def get_pivot_data():
 
 @app.route('/transfer')
 def serve_transfer():
-    return send_from_directory('.', 'transfer.html')
+    return _protected_page('transfer.html', 'create_transfer')
 
 @app.route('/transfer-reports')
 def serve_transfer_reports():
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin' and not _can_access_permission('manage_transfers'):
+        return redirect('/app')
     return send_from_directory('.', 'transfer-reports.html')
+
+@app.route('/transfer-receipts')
+def serve_transfer_receipts():
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin' and not _can_access_permission('receive_transfer'):
+        return redirect('/app')
+    return send_from_directory('.', 'transfer-receipts.html')
+
+@app.route('/transfer-receipts/<int:request_id>/print')
+def serve_transfer_receipt_print(request_id):
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin' and not _can_access_permission('receive_transfer'):
+        return redirect('/app')
+    return send_from_directory('.', 'transfer-receipt-print.html')
+
+@app.route('/pending-requests')
+def serve_pending_requests():
+    if 'user_id' not in session:
+        return redirect('/')
+    if session.get('role') != 'superadmin' and not _can_access_permission('manage_transfers'):
+        return redirect('/app')
+    return send_from_directory('.', 'pending-requests.html')
 
 @app.route('/api/transfer/flavors', methods=['GET'])
 @login_required
 def get_transfer_flavors():
     """Get list of available flavors"""
-    branch_id = session.get('branch_id')
-    # If admin/superadmin wants to see all, they can, but for transfer request usually it's within a branch
-    # or requesting FROM a branch. Let's assume user requests items avaiable in THEIR branch (or globally?)
-    # User said "request for a flavor". Usually you request something you don't have, or you request to move something.
-    # Let's assume we list ALL flavors available in the system or current branch. 
-    # Let's use current branch or all if params say so.
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    branch_id = request.args.get('branch_id', type=int) or session.get('branch_id')
     
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Just get all distinct flavors for now
-    cursor.execute("SELECT DISTINCT flavour FROM scans WHERE flavour IS NOT NULL AND flavour != '' ORDER BY flavour")
+
+    query = "SELECT DISTINCT flavour FROM stock WHERE flavour IS NOT NULL AND flavour != ''"
+    params = []
+    if branch_id:
+        query += " AND branch_id = ?"
+        params.append(branch_id)
+    query += " ORDER BY flavour"
+
+    cursor.execute(query, params)
     flavors = [row['flavour'] for row in cursor.fetchall()]
     conn.close()
     
@@ -1661,6 +2285,8 @@ def get_transfer_flavors():
 @login_required
 def get_nearest_expiry():
     """Get nearest expiring batch for selected flavor"""
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     flavor = request.args.get('flavor')
     branch_id = request.args.get('branch_id', type=int) # Optional, if we want to limit to specific branch
     
@@ -1669,17 +2295,26 @@ def get_nearest_expiry():
 
     conn = get_db()
     cursor = conn.cursor()
+    quantity = request.args.get('quantity', type=int)
     
     query = '''
-        SELECT batch_no, expiry_date, mfg_date, rack_no, shelf_no, branch_id
-        FROM scans 
-        WHERE flavour = ? AND movement = 'IN' 
-        AND expiry_date IS NOT NULL AND expiry_date != ''
+        SELECT st.id as stock_id, st.batch_no, st.expiry_date, st.mfg_date, st.rack_no, st.shelf_no, st.branch_id,
+               b.name as branch_name,
+               (SELECT MIN(s.id) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN') as scan_id
+        FROM stock st
+        LEFT JOIN branches b ON st.branch_id = b.id
+        WHERE st.flavour = ?
+          AND st.expiry_date IS NOT NULL AND st.expiry_date != ''
+          AND EXISTS (SELECT 1 FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN')
+          AND (
+                (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN') >
+                (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'OUT')
+              )
     '''
     params = [flavor]
     
     if branch_id:
-        query += ' AND branch_id = ?'
+        query += ' AND st.branch_id = ?'
         params.append(branch_id)
         
     # We want the nearest (earliest) expiry date that is presumably 'future' or 'recent'
@@ -1716,13 +2351,16 @@ def get_nearest_expiry():
             
             if expiry_date:
                 items.append({
+                    'scan_id': row['scan_id'],
+                    'stock_id': row['stock_id'],
                     'batch_no': row['batch_no'],
-                    'expiry_date': row['expiry_date'], # Keep original string
-                    'expiry_dt': expiry_date, # For sorting
+                    'expiry_date': row['expiry_date'],  # Keep original string
+                    'expiry_dt': expiry_date,  # For sorting
                     'mfg_date': row['mfg_date'],
                     'rack_no': row['rack_no'],
                     'shelf_no': row['shelf_no'],
-                    'branch_id': row['branch_id']
+                    'branch_id': row['branch_id'],
+                    'branch_name': row['branch_name']
                 })
         except:
             continue
@@ -1732,6 +2370,9 @@ def get_nearest_expiry():
 
     # Sort by expiry date ASC
     items.sort(key=lambda x: x['expiry_dt'])
+
+    if quantity and quantity > 0:
+        items = items[:quantity]
     
     # Pick the first one (nearest expiry)
     best_item = items[0]
@@ -1739,14 +2380,17 @@ def get_nearest_expiry():
     # Remove expiry_dt object before returning
     del best_item['expiry_dt']
     
-    return jsonify({'success': True, 'item': best_item})
+    return jsonify({'success': True, 'item': best_item, 'requested_quantity': quantity or 1, 'selected_count': len(items)})
 
 @app.route('/api/transfer/batches', methods=['GET'])
 @login_required
 def get_transfer_batches():
     """Get all batches for selected flavor, sorted by expiry"""
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     flavor = request.args.get('flavor')
     branch_id = request.args.get('branch_id', type=int)
+    quantity = request.args.get('quantity', type=int)
     
     if not flavor:
         return jsonify({'success': False, 'error': 'Flavor is required'})
@@ -1755,15 +2399,23 @@ def get_transfer_batches():
     cursor = conn.cursor()
     
     query = '''
-        SELECT batch_no, expiry_date, mfg_date, rack_no, shelf_no, branch_id
-        FROM scans 
-        WHERE flavour = ? AND movement = 'IN' 
-        AND expiry_date IS NOT NULL AND expiry_date != ''
+        SELECT st.id as stock_id, st.batch_no, st.expiry_date, st.mfg_date, st.rack_no, st.shelf_no, st.branch_id,
+               b.name as branch_name,
+               (SELECT MIN(s.id) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN') as scan_id
+        FROM stock st
+        LEFT JOIN branches b ON st.branch_id = b.id
+        WHERE st.flavour = ?
+          AND st.expiry_date IS NOT NULL AND st.expiry_date != ''
+          AND EXISTS (SELECT 1 FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN')
+          AND (
+                (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN') >
+                (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'OUT')
+              )
     '''
     params = [flavor]
     
     if branch_id:
-        query += ' AND branch_id = ?'
+        query += ' AND st.branch_id = ?'
         params.append(branch_id)
     
     cursor.execute(query, params)
@@ -1794,44 +2446,134 @@ def get_transfer_batches():
                  expiry_date = datetime.max.date()
 
             items.append({
+                'scan_id': row['scan_id'],
+                'stock_id': row['stock_id'],
                 'batch_no': row['batch_no'],
                 'expiry_date': row['expiry_date'],
                 'expiry_dt': expiry_date,
                 'mfg_date': row['mfg_date'],
                 'rack_no': row['rack_no'],
                 'shelf_no': row['shelf_no'],
-                'branch_id': row['branch_id']
+                'branch_id': row['branch_id'],
+                'branch_name': row['branch_name']
             })
         except:
              continue
             
     # Sort by expiry date ASC
     items.sort(key=lambda x: x['expiry_dt'])
+
+    if quantity and quantity > 0:
+        items = items[:quantity]
     
     # Cleanup helper key
     for item in items:
         del item['expiry_dt']
     
-    return jsonify({'success': True, 'items': items})
+    return jsonify({'success': True, 'items': items, 'requested_quantity': quantity or 1, 'selected_count': len(items)})
 
 @app.route('/api/transfer/request', methods=['POST'])
 @login_required
 def create_transfer_request():
     """Submit a new transfer request"""
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     data = request.get_json()
     
-    flavour = data.get('flavour')
-    batch_no = data.get('batch_no')
-    expiry_date = data.get('expiry_date')
-    rack_no = data.get('rack_no')
-    shelf_no = data.get('shelf_no')
+    quantity = int(data.get('quantity', 1))
+    stock_ids = data.get('stock_ids', [])
+    source_branch_id = data.get('source_branch_id')
+    destination_type = data.get('destination_type', 'production_room')
+    destination_branch_id = data.get('destination_branch_id')
+    production_room_id = data.get('production_room_id')
+    truck_id = data.get('truck_id')
     notes = data.get('notes', '')
     
-    if not flavour or not batch_no:
-        return jsonify({'success': False, 'error': 'Flavor and Batch No are required'})
+    if quantity < 1:
+        return jsonify({'success': False, 'error': 'quantity is required'}), 400
+    if not isinstance(stock_ids, list) or not stock_ids:
+        return jsonify({'success': False, 'error': 'stock_ids and source_branch_id are required'}), 400
+    if not source_branch_id:
+        return jsonify({'success': False, 'error': 'source_branch_id is required'}), 400
+    try:
+        source_branch_id = int(source_branch_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'source_branch_id must be a valid branch ID'}), 400
+    if quantity != len(stock_ids):
+        return jsonify({'success': False, 'error': 'quantity must match the number of selected stock items'}), 400
+    if destination_type not in ('production_room', 'branch'):
+        return jsonify({'success': False, 'error': 'Invalid destination type'}), 400
         
     conn = get_db()
     cursor = conn.cursor()
+
+    if truck_id not in (None, '', 'null'):
+        try:
+            truck_id = int(truck_id)
+        except (TypeError, ValueError):
+            conn.close()
+            return jsonify({'success': False, 'error': 'truck_id must be a valid truck ID'}), 400
+        cursor.execute('SELECT id FROM trucks WHERE id = ?', (truck_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': 'Invalid truck selected'}), 400
+    else:
+        truck_id = None
+
+    placeholders = ','.join(['?'] * len(stock_ids))
+    cursor.execute(f'''
+        SELECT id, branch_id FROM stock
+        WHERE id IN ({placeholders})
+    ''', stock_ids)
+    selected_stocks = cursor.fetchall()
+    if len(selected_stocks) != len(stock_ids):
+        conn.close()
+        return jsonify({'success': False, 'error': 'One or more stock items are invalid'}), 400
+
+    if any(int(row['branch_id']) != source_branch_id for row in selected_stocks):
+        conn.close()
+        return jsonify({'success': False, 'error': 'Selected stock items must belong to the same branch'}), 400
+
+    if destination_type == 'production_room':
+        if not production_room_id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'production_room_id is required'}), 400
+
+        cursor.execute('''
+            SELECT pr.id, pr.branch_id, pr.name, b.name as branch_name
+            FROM production_rooms pr
+            LEFT JOIN branches b ON pr.branch_id = b.id
+            WHERE pr.id = ?
+        ''', (production_room_id,))
+        room = cursor.fetchone()
+        if not room:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Invalid production room selected'}), 400
+
+        if source_branch_id != int(room['branch_id']):
+            conn.close()
+            return jsonify({'success': False, 'error': 'Production room must belong to the same branch as the stock'}), 400
+
+        destination_branch_id = int(room['branch_id'])
+    else:
+        if not destination_branch_id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'destination_branch_id is required'}), 400
+        try:
+            destination_branch_id = int(destination_branch_id)
+        except (TypeError, ValueError):
+            conn.close()
+            return jsonify({'success': False, 'error': 'destination_branch_id must be a valid branch ID'}), 400
+        if destination_branch_id == source_branch_id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Destination branch must be different from the source branch'}), 400
+
+        cursor.execute('SELECT id FROM branches WHERE id = ?', (destination_branch_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': 'Invalid destination branch selected'}), 400
+
+        production_room_id = _get_or_create_production_room_id(cursor, destination_branch_id)
     
     user_id = session.get('user_id')
     
@@ -1839,37 +2581,74 @@ def create_transfer_request():
     cursor.execute('SELECT username FROM users WHERE id = ?', (user_id,))
     user_row = cursor.fetchone()
     username = user_row['username'] if user_row else 'Unknown'
-    
-    # Get user's branch
-    cursor.execute('SELECT branch_id FROM users WHERE id = ?', (user_id,))
-    branch_row = cursor.fetchone()
-    branch_id = branch_row['branch_id'] if branch_row else None
 
     cursor.execute('''
         INSERT INTO transfer_requests 
-        (flavour, batch_no, expiry_date, rack_no, shelf_no, requested_by, requested_by_name, notes, branch_id, status)
+        (quantity, requested_by, requested_by_name, source_branch_id, destination_type, destination_branch_id, production_room_id, truck_id, notes, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')
-    ''', (flavour, batch_no, expiry_date, rack_no, shelf_no, user_id, username, notes, branch_id))
+    ''', (quantity, user_id, username, source_branch_id, destination_type, destination_branch_id, production_room_id, truck_id, notes))
+    transfer_request_id = cursor.lastrowid
+
+    _record_production_stock(cursor, transfer_request_id, stock_ids, production_room_id)
     
     conn.commit()
     conn.close()
     
     return jsonify({'success': True, 'message': 'Transfer request submitted successfully'})
 
+@app.route('/api/trucks', methods=['GET'])
+@login_required
+def get_trucks():
+    """Get the truck lookup list for optional transfer assignment."""
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, truck_no, note
+        FROM trucks
+        ORDER BY truck_no ASC, id ASC
+    ''')
+    trucks = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'success': True, 'trucks': trucks})
+
 @app.route('/api/transfer/requests', methods=['GET'])
 @login_required
 def get_transfer_requests():
     """Get all transfer requests"""
+    if not _can_access_permission('manage_transfers'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     # Filters
     status = request.args.get('status')
     
-    query = 'SELECT * FROM transfer_requests'
+    query = '''
+        SELECT tr.id, tr.quantity, tr.requested_by, tr.requested_by_name,
+               tr.source_branch_id, sb.name as source_branch_name,
+               tr.destination_type, tr.destination_branch_id, db.name as destination_branch_name,
+               tr.production_room_id, pr.name as production_room_name,
+               pr.branch_id as production_room_branch_id,
+               pb.name as production_branch_name,
+               tr.truck_id, tk.truck_no, tk.note as truck_note,
+               tr.status, tr.notes, tr.created_at, tr.updated_at,
+               COUNT(ps.id) as production_stock_count
+        FROM transfer_requests tr
+        LEFT JOIN branches sb ON tr.source_branch_id = sb.id
+        LEFT JOIN branches db ON tr.destination_branch_id = db.id
+        LEFT JOIN production_rooms pr ON tr.production_room_id = pr.id
+        LEFT JOIN branches pb ON pr.branch_id = pb.id
+        LEFT JOIN trucks tk ON tr.truck_id = tk.id
+        LEFT JOIN production_stock ps ON ps.transfer_request_id = tr.id
+    '''
     params = []
     
     where_clauses = []
     if status:
-        where_clauses.append('status = ?')
-        params.append(status)
+        if status == 'pending':
+            where_clauses.append("tr.status IN ('submitted', 'pending')")
+        else:
+            where_clauses.append('tr.status = ?')
+            params.append(status)
         
     # If user is not admin, distinct logic? 
     # Plan says "when any other person opens the report should be able to show who requested it".
@@ -1877,8 +2656,7 @@ def get_transfer_requests():
     
     if where_clauses:
         query += ' WHERE ' + ' AND '.join(where_clauses)
-        
-    query += ' ORDER BY created_at DESC'
+    query += ' GROUP BY tr.id ORDER BY tr.created_at DESC'
     
     conn = get_db()
     cursor = conn.cursor()
@@ -1888,10 +2666,164 @@ def get_transfer_requests():
     
     return jsonify({'success': True, 'requests': requests})
 
+@app.route('/api/transfer/receipts', methods=['GET'])
+@login_required
+def get_transfer_receipts():
+    """List incoming branch transfers for the current branch or a selected branch."""
+    if not _can_access_permission('receive_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    status = request.args.get('status')
+    branch_id = request.args.get('branch_id', type=int)
+    role = session.get('role')
+    current_branch_id = session.get('branch_id')
+
+    if branch_id is None and role != 'superadmin':
+        branch_id = current_branch_id
+
+    if role != 'superadmin' and branch_id != current_branch_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = '''
+        SELECT tr.id, tr.quantity, tr.requested_by, tr.requested_by_name,
+               tr.source_branch_id, sb.name as source_branch_name, sb.code as source_branch_code,
+               tr.destination_branch_id, db.name as destination_branch_name, db.code as destination_branch_code,
+               tr.truck_id, tk.truck_no, tk.note as truck_note,
+               tr.status, tr.receipt_status, tr.received_at, tr.received_by_name, tr.notes, tr.created_at, tr.updated_at,
+               COUNT(ps.id) as production_stock_count
+        FROM transfer_requests tr
+        LEFT JOIN branches sb ON tr.source_branch_id = sb.id
+        LEFT JOIN branches db ON tr.destination_branch_id = db.id
+        LEFT JOIN trucks tk ON tr.truck_id = tk.id
+        LEFT JOIN production_stock ps ON ps.transfer_request_id = tr.id
+        WHERE tr.destination_type = 'branch'
+    '''
+    params = []
+    if branch_id:
+        query += ' AND tr.destination_branch_id = ?'
+        params.append(branch_id)
+    if status:
+        query += ' AND tr.status = ?'
+        params.append(status)
+
+    query += ' GROUP BY tr.id ORDER BY tr.created_at DESC'
+
+    cursor.execute(query, params)
+    receipts = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return jsonify({'success': True, 'receipts': receipts})
+
+@app.route('/api/transfer/receipts/<int:request_id>', methods=['GET'])
+@login_required
+def get_transfer_receipt_detail(request_id):
+    """Get the full detail for a single transfer receipt."""
+    if not _can_access_permission('receive_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    role = session.get('role')
+    current_branch_id = session.get('branch_id')
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT tr.id, tr.quantity, tr.requested_by, tr.requested_by_name,
+               tr.source_branch_id, sb.name as source_branch_name, sb.code as source_branch_code,
+               tr.destination_type, tr.destination_branch_id, db.name as destination_branch_name, db.code as destination_branch_code,
+               tr.production_room_id, pr.name as production_room_name,
+               tr.truck_id, tk.truck_no, tk.note as truck_note,
+               tr.status, tr.receipt_status, tr.received_at, tr.received_by_name, tr.notes, tr.created_at, tr.updated_at
+        FROM transfer_requests tr
+        LEFT JOIN branches sb ON tr.source_branch_id = sb.id
+        LEFT JOIN branches db ON tr.destination_branch_id = db.id
+        LEFT JOIN production_rooms pr ON tr.production_room_id = pr.id
+        LEFT JOIN trucks tk ON tr.truck_id = tk.id
+        WHERE tr.id = ?
+    ''', (request_id,))
+    receipt = cursor.fetchone()
+
+    if not receipt:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Transfer receipt not found'}), 404
+
+    receipt = dict(receipt)
+    if role != 'superadmin' and receipt.get('destination_branch_id') != current_branch_id:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    cursor.execute('''
+        SELECT ps.id as production_stock_id, ps.created_at as selected_at,
+               s.id as stock_id, s.batch_no, s.mfg_date, s.expiry_date, s.flavour,
+               s.rack_no, s.shelf_no, s.branch_id, b.name as branch_name, b.code as branch_code
+        FROM production_stock ps
+        LEFT JOIN stock s ON ps.stock_id = s.id
+        LEFT JOIN branches b ON s.branch_id = b.id
+        WHERE ps.transfer_request_id = ?
+        ORDER BY ps.created_at ASC, ps.id ASC
+    ''', (request_id,))
+    stock_items = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    receipt['stock_items'] = stock_items
+    receipt['stock_count'] = len(stock_items)
+    return jsonify({'success': True, 'receipt': receipt})
+
+@app.route('/api/transfer/receipts/<int:request_id>/mark-received', methods=['POST'])
+@login_required
+def mark_transfer_received(request_id):
+    """Mark a branch transfer as received by the current user."""
+    if not _can_access_permission('receive_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    role = session.get('role')
+    current_branch_id = session.get('branch_id')
+    user_id = session.get('user_id')
+    username = session.get('username') or 'Unknown'
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, destination_type, destination_branch_id, receipt_status
+        FROM transfer_requests
+        WHERE id = ?
+    ''', (request_id,))
+    transfer = cursor.fetchone()
+    if not transfer:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Transfer receipt not found'}), 404
+
+    if transfer['destination_type'] != 'branch':
+        conn.close()
+        return jsonify({'success': False, 'error': 'Only branch transfers can be marked as received'}), 400
+
+    if role != 'superadmin' and transfer['destination_branch_id'] != current_branch_id:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    if (transfer['receipt_status'] or 'pending').lower() == 'received':
+        conn.close()
+        return jsonify({'success': False, 'error': 'This receipt has already been marked as received'}), 400
+
+    cursor.execute('''
+        UPDATE transfer_requests
+        SET receipt_status = 'received',
+            received_at = CURRENT_TIMESTAMP,
+            received_by = ?,
+            received_by_name = ?,
+            status = 'completed',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (user_id, username, request_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
 @app.route('/api/transfer/update-status', methods=['POST'])
 @admin_required
 def update_transfer_status():
     """Update status of a transfer request (Admin only)"""
+    if not _can_access_permission('manage_transfers'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     data = request.get_json()
     request_id = data.get('id')
     new_status = data.get('status')
@@ -1902,6 +2834,11 @@ def update_transfer_status():
     conn = get_db()
     cursor = conn.cursor()
     
+    cursor.execute('SELECT id FROM transfer_requests WHERE id = ?', (request_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'error': 'Transfer request not found'}), 404
+
     cursor.execute('UPDATE transfer_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
                    (new_status, request_id))
     

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Branch Management - Label Scanner</title>
+    <title>Branches and Production Houses - Label Scanner</title>
     <style>
         * {
             margin: 0;
@@ -267,6 +267,83 @@
             margin-left: 8px;
         }
 
+        .message {
+            display: none;
+            margin-bottom: 20px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+        }
+
+        .message.success {
+            display: block;
+            background: rgba(16, 185, 129, 0.14);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: #86efac;
+        }
+
+        .message.error {
+            display: block;
+            background: rgba(239, 68, 68, 0.14);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: #fca5a5;
+        }
+
+        .section-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .btn-small {
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+        }
+
+        .house-list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .house-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .house-info h3 {
+            font-size: 1.02rem;
+            margin-bottom: 4px;
+        }
+
+        .house-info p {
+            color: var(--text2);
+            font-size: 0.9rem;
+        }
+
+        .tag {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: rgba(108, 99, 255, 0.16);
+            color: #c4b5fd;
+            font-size: 0.78rem;
+        }
+
         .branch-stats {
             display: flex;
             gap: 16px;
@@ -290,6 +367,10 @@
                 padding: 12px 0;
             }
 
+            .section-grid {
+                grid-template-columns: 1fr;
+            }
+
             .branch-card {
                 flex-direction: column;
                 align-items: flex-start;
@@ -306,8 +387,19 @@
                 gap: 10px;
             }
 
-            #create-branch-form .btn-primary {
+            #create-branch-form .btn-primary,
+            #create-production-form .btn-primary {
                 width: 100%;
+            }
+
+            .house-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .card-actions {
+                width: 100%;
+                justify-content: flex-start;
             }
         }
     </style>
@@ -340,8 +432,10 @@
         <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
                 Reports</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pending-requests'">⏳ <span>Pending
+                Requests</span></button>
         <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
-        <button class="sidebar-btn active" onclick="location.href='/branches'">🏢 <span>Branches</span></button>
+        <button class="sidebar-btn active" onclick="location.href='/branches'">🏢 <span>Branches &amp; Houses</span></button>
 
         <div class="sidebar-divider"></div>
         <div class="sidebar-section">Actions</div>
@@ -356,46 +450,109 @@
         <div class="container">
             <header class="header">
                 <div>
-                    <h1>🏢 Branch Management</h1>
+                    <h1>🏢 Branches and Production Houses</h1>
+                    <p style="color:var(--text2);margin-top:6px;">Add or remove branches and the production houses attached to them.</p>
                 </div>
             </header>
 
-            <!-- Create Branch -->
-            <div class="section">
-                <h2>➕ Create New Branch</h2>
-                <form id="create-branch-form" onsubmit="createBranch(event)">
-                    <div class="form-group">
-                        <label>Branch Name</label>
-                        <input type="text" id="branch-name" placeholder="E.g. North Warehouse" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Branch Code (Unique ID)</label>
-                        <input type="text" id="branch-code" placeholder="E.g. NORTH01" required
-                            style="text-transform: uppercase;">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Create Branch</button>
-                </form>
+            <div id="page-message" class="message"></div>
+
+            <div class="section-grid">
+                <div class="section">
+                    <h2>➕ Create New Branch</h2>
+                    <form id="create-branch-form" onsubmit="createBranch(event)">
+                        <div class="form-group">
+                            <label>Branch Name</label>
+                            <input type="text" id="branch-name" placeholder="E.g. North Warehouse" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Branch Code (Unique ID)</label>
+                            <input type="text" id="branch-code" placeholder="E.g. NORTH01" required
+                                style="text-transform: uppercase;">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Branch</button>
+                    </form>
+                </div>
+
+                <div class="section">
+                    <h2>➕ Create Production House</h2>
+                    <form id="create-production-form" onsubmit="createProductionHouse(event)">
+                        <div class="form-group">
+                            <label>Production House Name</label>
+                            <input type="text" id="production-name" placeholder="E.g. Main Production House" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Branch</label>
+                            <select id="production-branch-id" required style="width:100%;padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:var(--text);">
+                                <option value="">Loading branches...</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Production House</button>
+                    </form>
+                </div>
             </div>
 
-            <!-- Branch List -->
             <div class="section">
                 <h2>📋 Existing Branches</h2>
                 <div class="branch-list" id="branch-list">
                     <div class="no-data">Loading...</div>
                 </div>
             </div>
+
+            <div class="section">
+                <h2>🏭 Existing Production Houses</h2>
+                <div class="house-list" id="production-list">
+                    <div class="no-data">Loading...</div>
+                </div>
+            </div>
         </div>
 
         <script>
+            function showMessage(text, type = 'success') {
+                const el = document.getElementById('page-message');
+                el.textContent = text;
+                el.className = `message ${type}`;
+            }
+
+            function clearMessage() {
+                const el = document.getElementById('page-message');
+                el.textContent = '';
+                el.className = 'message';
+            }
+
             async function loadBranches() {
                 try {
                     const response = await fetch('/api/admin/branches');
                     const data = await response.json();
-                    renderBranches(data.branches || []);
+                    const branches = data.branches || [];
+                    renderBranches(branches);
+                    populateBranchSelect(branches);
                 } catch (err) {
                     console.error('Error loading branches:', err);
                     document.getElementById('branch-list').innerHTML = '<div class="no-data">Failed to load branches</div>';
                 }
+            }
+
+            async function loadProductionHouses() {
+                try {
+                    const response = await fetch('/api/admin/production-houses');
+                    const data = await response.json();
+                    renderProductionHouses(data.production_houses || []);
+                } catch (err) {
+                    console.error('Error loading production houses:', err);
+                    document.getElementById('production-list').innerHTML = '<div class="no-data">Failed to load production houses</div>';
+                }
+            }
+
+            function populateBranchSelect(branches) {
+                const select = document.getElementById('production-branch-id');
+                select.innerHTML = '<option value="">Select a branch</option>';
+                branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = `${branch.name} (${branch.code})`;
+                    select.appendChild(option);
+                });
             }
 
             function renderBranches(branches) {
@@ -411,6 +568,7 @@
                     <div class="branch-info">
                         <h3>${branch.name} <span class="branch-code">${branch.code}</span></h3>
                         <p>ID: ${branch.id}</p>
+                        <p>${branch.production_house_count || 0} production house(s)</p>
                     </div>
                     <div class="branch-stats">
                         <div class="stat-badge" title="Users">
@@ -419,9 +577,35 @@
                         <div class="stat-badge" title="Scans">
                             📦 ${branch.scan_count} Scans
                         </div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger btn-small" onclick="deleteBranch(${branch.id}, ${JSON.stringify(branch.name)})">Delete</button>
+                        </div>
                     </div>
                 </div>
             `).join('');
+            }
+
+            function renderProductionHouses(rooms) {
+                const container = document.getElementById('production-list');
+
+                if (rooms.length === 0) {
+                    container.innerHTML = '<div class="no-data">No production houses found</div>';
+                    return;
+                }
+
+                container.innerHTML = rooms.map(room => `
+                    <div class="house-card">
+                        <div class="house-info">
+                            <h3>${room.name}</h3>
+                            <p>ID: ${room.id}</p>
+                            <p>Branch: ${room.branch_name || '-'} <span class="branch-code">${room.branch_code || ''}</span></p>
+                            <span class="tag">${room.transfer_count || 0} transfer(s), ${room.production_stock_count || 0} stock record(s)</span>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger btn-small" onclick="deleteProductionHouse(${room.id}, ${JSON.stringify(room.name)})">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
             }
 
             async function createBranch(e) {
@@ -446,17 +630,89 @@
                     const result = await response.json();
 
                     if (result.success) {
-                        alert('✅ Branch created successfully!');
+                        showMessage('Branch created successfully.', 'success');
                         document.getElementById('create-branch-form').reset();
-                        loadBranches();
+                        await loadBranches();
+                        await loadProductionHouses();
                     } else {
-                        alert('❌ Error: ' + (result.error || 'Failed to create branch'));
+                        showMessage(result.error || 'Failed to create branch', 'error');
                     }
                 } catch (err) {
-                    alert('❌ Error: ' + err.message);
+                    showMessage(err.message, 'error');
                 } finally {
                     btn.disabled = false;
                     btn.textContent = 'Create Branch';
+                }
+            }
+
+            async function createProductionHouse(e) {
+                e.preventDefault();
+
+                const name = document.getElementById('production-name').value.trim();
+                const branchId = document.getElementById('production-branch-id').value;
+                const btn = e.target.querySelector('button');
+
+                if (!name || !branchId) return;
+
+                btn.disabled = true;
+                btn.textContent = 'Creating...';
+
+                try {
+                    const response = await fetch('/api/admin/production-houses', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, branch_id: Number(branchId) })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showMessage('Production house created successfully.', 'success');
+                        document.getElementById('create-production-form').reset();
+                        await loadProductionHouses();
+                    } else {
+                        showMessage(result.error || 'Failed to create production house', 'error');
+                    }
+                } catch (err) {
+                    showMessage(err.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Create Production House';
+                }
+            }
+
+            async function deleteBranch(id, name) {
+                if (!confirm(`Delete branch "${name}"? This cannot be undone.`)) return;
+
+                try {
+                    const response = await fetch(`/api/admin/branches/${id}`, { method: 'DELETE' });
+                    const result = await response.json();
+                    if (result.success) {
+                        showMessage('Branch deleted successfully.', 'success');
+                        await loadBranches();
+                        await loadProductionHouses();
+                    } else {
+                        showMessage(result.error || 'Failed to delete branch', 'error');
+                    }
+                } catch (err) {
+                    showMessage(err.message, 'error');
+                }
+            }
+
+            async function deleteProductionHouse(id, name) {
+                if (!confirm(`Delete production house "${name}"? This cannot be undone.`)) return;
+
+                try {
+                    const response = await fetch(`/api/admin/production-houses/${id}`, { method: 'DELETE' });
+                    const result = await response.json();
+                    if (result.success) {
+                        showMessage('Production house deleted successfully.', 'success');
+                        await loadProductionHouses();
+                    } else {
+                        showMessage(result.error || 'Failed to delete production house', 'error');
+                    }
+                } catch (err) {
+                    showMessage(err.message, 'error');
                 }
             }
 
@@ -468,6 +724,7 @@
 
             // Load on page load
             loadBranches();
+            loadProductionHouses();
         </script>
     </div>
 </body>

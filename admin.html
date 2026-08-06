@@ -798,8 +798,9 @@
             window.location.href = '/';
         } else {
             const user = JSON.parse(userData);
-            if (user.role !== 'admin' && user.role !== 'superadmin') {
-                alert('Access denied. Admin only.');
+            const perms = new Set(user.permissions || []);
+            if (user.role !== 'superadmin' && !perms.has('view_admin_dashboard')) {
+                alert('Access denied. Dashboard permission required.');
                 window.location.href = '/app';
             }
         }
@@ -814,11 +815,16 @@
         <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
         <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/authorizations'">🔐 <span>Authorizations</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
                 Reports</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer-receipts'">📥 <span>Transfer
+                Receipts</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pending-requests'">⏳ <span>Pending
+                Requests</span></button>
         <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
         <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
-            <span>Branches</span></button>
+            <span>Branches &amp; Houses</span></button>
 
         <div class="sidebar-divider"></div>
         <div class="sidebar-section">Actions</div>

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transfer Receipt Print</title>
+    <style>
+        :root {
+            --ink: #102033;
+            --muted: #5d7285;
+            --line: #d8e2ec;
+            --panel: #f8fbfe;
+            --accent: #1f6fb2;
+            --success: #11845d;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            color: var(--ink);
+            background: #edf3f8;
+        }
+
+        .page {
+            max-width: 980px;
+            margin: 24px auto;
+            padding: 0 18px 28px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .toolbar button {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .print-btn { background: var(--accent); color: #fff; }
+        .close-btn { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+
+        .sheet {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 18px 50px rgba(16, 32, 51, 0.08);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            align-items: flex-start;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--line);
+            margin-bottom: 18px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+
+        .header p { margin: 6px 0 0; color: var(--muted); }
+
+        .meta {
+            text-align: right;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .box {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: var(--panel);
+        }
+
+        .box .label {
+            display: block;
+            color: var(--muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 4px;
+        }
+
+        .box .value { font-size: 0.98rem; }
+
+        .section-title {
+            margin: 22px 0 10px;
+            font-size: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            font-size: 0.92rem;
+        }
+
+        th {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: rgba(17, 132, 93, 0.12);
+            color: var(--success);
+        }
+
+        .error {
+            background: #fff;
+            border: 1px solid #f3c5c5;
+            color: #b42318;
+            padding: 16px;
+            border-radius: 12px;
+        }
+
+        @media print {
+            body { background: #fff; }
+            .page { margin: 0; padding: 0; max-width: none; }
+            .toolbar { display: none; }
+            .sheet { box-shadow: none; border: none; border-radius: 0; }
+            @page { size: auto; margin: 10mm; }
+        }
+
+        @media (max-width: 720px) {
+            .header, .toolbar { flex-direction: column; align-items: flex-start; }
+            .meta { text-align: left; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+        </div>
+        <div class="sheet">
+            <div id="content">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function formatDate(value) {
+            if (!value) return '-';
+            const d = new Date(value);
+            return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+        }
+
+        function normalizeStatus(status) {
+            return (status || 'pending').toLowerCase();
+        }
+
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        const receiptId = parts[1];
+
+        async function load() {
+            const content = document.getElementById('content');
+            try {
+                const response = await fetch(`/api/transfer/receipts/${receiptId}`);
+                const data = await response.json();
+
+                if (!data.success || !data.receipt) {
+                    content.innerHTML = `<div class="error">${escapeHtml(data.error || 'Receipt not found')}</div>`;
+                    return;
+                }
+
+                const r = data.receipt;
+                const items = r.stock_items || [];
+                const truckLabel = r.truck_no ? `${r.truck_no}${r.truck_note ? ` (${r.truck_note})` : ''}` : '-';
+
+                content.innerHTML = `
+                    <div class="header">
+                        <div>
+                            <h1>Transfer Receipt #${escapeHtml(r.id)}</h1>
+                            <p>Incoming transfer receipt generated from the scanner system.</p>
+                        </div>
+                        <div class="meta">
+                            <div><strong>Status:</strong> <span class="badge">${escapeHtml(r.receipt_status || 'pending')}</span></div>
+                            <div style="margin-top:6px;"><strong>Created:</strong> ${escapeHtml(formatDate(r.created_at))}</div>
+                            <div style="margin-top:4px;"><strong>Updated:</strong> ${escapeHtml(formatDate(r.updated_at))}</div>
+                        </div>
+                    </div>
+
+                    <div class="grid">
+                        <div class="box"><span class="label">From</span><div class="value">${escapeHtml(r.source_branch_name || '-')} ${r.source_branch_code ? `(${escapeHtml(r.source_branch_code)})` : ''}</div></div>
+                        <div class="box"><span class="label">To</span><div class="value">${escapeHtml(r.destination_branch_name || '-')} ${r.destination_branch_code ? `(${escapeHtml(r.destination_branch_code)})` : ''}</div></div>
+                        <div class="box"><span class="label">Requested By</span><div class="value">${escapeHtml(r.requested_by_name || '-')}</div></div>
+                        <div class="box"><span class="label">Truck</span><div class="value">${escapeHtml(truckLabel)}</div></div>
+                        <div class="box"><span class="label">Quantity</span><div class="value">${escapeHtml(r.quantity || 1)}</div></div>
+                        <div class="box"><span class="label">Received By</span><div class="value">${escapeHtml(r.received_by_name || '-')} ${r.received_at ? `on ${escapeHtml(formatDate(r.received_at))}` : ''}</div></div>
+                        <div class="box" style="grid-column:1/-1;"><span class="label">Notes</span><div class="value">${escapeHtml(r.notes || '-')}</div></div>
+                    </div>
+
+                    <h2 class="section-title">Transferred Items</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Stock ID</th>
+                                <th>Batch</th>
+                                <th>Expiry</th>
+                                <th>Flavour</th>
+                                <th>Rack</th>
+                                <th>Shelf</th>
+                                <th>Source Branch</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${items.length ? items.map(item => `
+                                <tr>
+                                    <td>#${escapeHtml(item.stock_id || '-')}</td>
+                                    <td>${escapeHtml(item.batch_no || '-')}</td>
+                                    <td>${escapeHtml(item.expiry_date || '-')}</td>
+                                    <td>${escapeHtml(item.flavour || '-')}</td>
+                                    <td>${escapeHtml(item.rack_no || '-')}</td>
+                                    <td>${escapeHtml(item.shelf_no || '-')}</td>
+                                    <td>${escapeHtml(item.branch_name || '-')} ${item.branch_code ? `(${escapeHtml(item.branch_code)})` : ''}</td>
+                                </tr>
+                            `).join('') : '<tr><td colspan="7">No linked stock items</td></tr>'}
+                        </tbody>
+                    </table>
+                `;
+
+                setTimeout(() => window.print(), 500);
+            } catch (err) {
+                content.innerHTML = `<div class="error">Network error while loading receipt.</div>`;
+            }
+        }
+
+        load();
+    </script>
+</body>
+</html>

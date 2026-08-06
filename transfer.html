@@ -159,6 +159,86 @@
             border-color: var(--accent);
         }
 
+        .field-note {
+            display: block;
+            margin-top: 6px;
+            color: var(--text2);
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            background: rgba(0, 0, 0, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+        }
+
+        .toggle-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .toggle-copy strong {
+            font-size: 0.95rem;
+        }
+
+        .toggle-copy span {
+            color: var(--text2);
+            font-size: 0.82rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 54px;
+            height: 30px;
+            flex: 0 0 auto;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #4a4a6a;
+            transition: 0.2s;
+            border-radius: 999px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 24px;
+            width: 24px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.2s;
+            border-radius: 50%;
+        }
+
+        .switch input:checked + .slider {
+            background-color: var(--accent);
+        }
+
+        .switch input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
         textarea.form-control {
             resize: vertical;
             min-height: 100px;
@@ -262,11 +342,16 @@
         <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
         <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
         <button class="sidebar-btn active" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/authorizations'">🔐 <span>Authorizations</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
                 Reports</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer-receipts'">📥 <span>Transfer
+                Receipts</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pending-requests'">⏳ <span>Pending
+                Requests</span></button>
         <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
         <button class="sidebar-btn" id="btn-branches" style="display:none;" onclick="location.href='/branches'">🏢
-            <span>Branches</span></button>
+            <span>Branches &amp; Houses</span></button>
 
         <div class="sidebar-divider"></div>
         <div class="sidebar-section">Actions</div>
@@ -274,7 +359,7 @@
         <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
         <button class="sidebar-btn" onclick="document.getElementById('csv-upload').click()">📤 <span>Upload
                 CSV</span></button>
-        <button class="sidebar-btn" onclick="downloadReport()">📥 <span>Export</span></button>
+        <button id="export-report-btn" class="sidebar-btn" onclick="downloadReport()">📥 <span>Export</span></button>
 
         <div style="flex:1;"></div>
         <div class="sidebar-divider"></div>
@@ -295,33 +380,60 @@
                     </select>
                 </div>
 
-                <div class="form-group" id="batch-group" style="display:none;">
-                    <label>Select Batch (Sorted by Expiry)</label>
-                    <select id="batch-select" class="form-control" onchange="displayBatchDetails()">
-                        <option value="">-- Select Batch --</option>
+                <div class="form-group">
+                    <label>Source Branch ID</label>
+                    <select id="source-branch-select" class="form-control" onchange="handleSourceBranchChange()">
+                        <option value="">-- Select Source Branch --</option>
                     </select>
+                    <span class="field-note">Required. This branch is used to load stock and to validate the transfer request.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input id="quantity-input" class="form-control" type="number" min="1" value="1" onchange="loadBatches()">
+                </div>
+
+                <div class="form-group">
+                    <label>Truck No (Optional)</label>
+                    <select id="truck-select" class="form-control">
+                        <option value="">-- No truck selected --</option>
+                    </select>
+                    <span class="field-note">Optional. Pick a truck if this transfer is assigned to one.</span>
+                </div>
+
+                <div class="form-group">
+                    <div class="toggle-row">
+                        <div class="toggle-copy">
+                            <strong>Destination mode</strong>
+                            <span>On = production room, off = another branch.</span>
+                        </div>
+                        <label class="switch" title="Toggle destination mode">
+                            <input id="destination-mode-toggle" type="checkbox" checked onchange="handleDestinationModeChange()">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="production-room-group">
+                    <label>Production Room</label>
+                    <select id="production-room-select" class="form-control" disabled>
+                        <option value="">-- Select Production Room --</option>
+                    </select>
+                    <span class="field-note">Rooms are filtered by the selected source branch.</span>
+                </div>
+
+                <div class="form-group" id="target-branch-group" style="display:none;">
+                    <label>Destination Branch</label>
+                    <select id="target-branch-select" class="form-control" disabled>
+                        <option value="">-- Select Destination Branch --</option>
+                    </select>
+                    <span class="field-note">Select a different branch to transfer stock to another branch.</span>
                 </div>
 
                 <div id="details-box" class="details-box">
-                    <h3 style="margin-bottom:10px;color:var(--accent)">Nearest Expiry Batch Found</h3>
-                    <div class="details-grid">
-                        <div class="detail-item">
-                            <strong>Batch Number</strong>
-                            <span id="batch-no">-</span>
-                        </div>
-                        <div class="detail-item">
-                            <strong>Expiry Date</strong>
-                            <span id="expiry-date" style="color:#ef4444">-</span>
-                        </div>
-                        <div class="detail-item">
-                            <strong>Rack</strong>
-                            <span id="rack-no">-</span>
-                        </div>
-                        <div class="detail-item">
-                            <strong>Shelf</strong>
-                            <span id="shelf-no">-</span>
-                        </div>
-                    </div>
+                    <h3 style="margin-bottom:10px;color:var(--accent)">Nearest Stocks Selected</h3>
+                    <div id="stock-summary" style="margin-bottom:12px;color:var(--text2)"></div>
+                    <div id="stock-list" style="display:grid;gap:10px;"></div>
                 </div>
 
                 <div id="no-stock-msg" style="display:none;color:var(--text2);margin-bottom:20px;text-align:center;">
@@ -343,24 +455,210 @@
     </div>
 
     <script>
+        let currentBranchId = null;
+        let currentBranchName = '';
+        let currentRole = '';
+        let currentDestinationMode = 'production_room';
+        let currentStocks = [];
+        let selectedSourceBranchId = null;
+
         // Check authentication
         fetch('/api/check-auth')
             .then(res => res.json())
             .then(data => {
                 if (!data.authenticated) window.location.href = '/';
 
+                currentBranchId = data.branch_id || null;
+                currentBranchName = data.branch_name || 'Current Branch';
+                currentRole = data.role || '';
+                const perms = new Set(data.permissions || []);
+                selectedSourceBranchId = currentBranchId;
+
                 if (data.role === 'superadmin') {
                     const btnBranches = document.getElementById('btn-branches');
                     if (btnBranches) btnBranches.style.display = 'flex';
                 }
+
+                const exportBtn = document.getElementById('export-report-btn');
+                if (exportBtn) {
+                    exportBtn.style.display = (data.role === 'superadmin' || perms.has('export_data')) ? 'flex' : 'none';
+                }
+
+                loadBranches();
+                loadTrucks();
+                syncDestinationModeUI();
+                loadDestinationOptions();
+                loadFlavors(currentBranchId);
             });
 
-        // Load flavors on init
-        loadFlavors();
-
-        async function loadFlavors() {
+        async function loadTrucks() {
             try {
-                const response = await fetch('/api/transfer/flavors');
+                const response = await fetch('/api/trucks');
+                const data = await response.json();
+                const select = document.getElementById('truck-select');
+
+                if (!select) return;
+
+                select.innerHTML = '<option value="">-- No truck selected --</option>';
+
+                if (data.success && Array.isArray(data.trucks)) {
+                    data.trucks.forEach(truck => {
+                        const option = document.createElement('option');
+                        option.value = truck.id;
+                        option.textContent = `${truck.id} - ${truck.truck_no}${truck.note ? ` (${truck.note})` : ''}`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load trucks:', err);
+            }
+        }
+
+        async function loadBranches() {
+            try {
+                const response = await fetch('/api/branches');
+                const data = await response.json();
+                const select = document.getElementById('source-branch-select');
+
+                select.innerHTML = '<option value="">-- Select Source Branch --</option>';
+
+                if (data.branches && data.branches.length > 0) {
+                    data.branches.forEach(branch => {
+                        const option = document.createElement('option');
+                        option.value = branch.id;
+                        option.textContent = `${branch.id} - ${branch.name} (${branch.code})`;
+                        select.appendChild(option);
+                    });
+
+                    if (currentBranchId) {
+                        select.value = String(currentBranchId);
+                        select.disabled = true;
+                    } else {
+                        select.disabled = false;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load branches:', err);
+            }
+        }
+
+        function getSelectedSourceBranchId() {
+            const select = document.getElementById('source-branch-select');
+            const value = select && select.value ? Number(select.value) : null;
+            return value || currentBranchId || null;
+        }
+
+        function handleSourceBranchChange() {
+            selectedSourceBranchId = getSelectedSourceBranchId();
+            currentStocks = [];
+            document.getElementById('details-box').style.display = 'none';
+            document.getElementById('no-stock-msg').style.display = 'none';
+            document.getElementById('submit-btn').disabled = true;
+            loadDestinationOptions();
+            loadFlavors(selectedSourceBranchId);
+
+            if (document.getElementById('flavor-select').value) {
+                loadBatches();
+            }
+        }
+
+        function handleDestinationModeChange() {
+            currentDestinationMode = document.getElementById('destination-mode-toggle').checked ? 'production_room' : 'branch';
+            syncDestinationModeUI();
+            loadDestinationOptions();
+        }
+
+        function syncDestinationModeUI() {
+            const roomGroup = document.getElementById('production-room-group');
+            const branchGroup = document.getElementById('target-branch-group');
+            const isProductionRoomMode = currentDestinationMode === 'production_room';
+
+            roomGroup.style.display = isProductionRoomMode ? '' : 'none';
+            branchGroup.style.display = isProductionRoomMode ? 'none' : '';
+        }
+
+        async function loadDestinationOptions() {
+            if (currentDestinationMode === 'production_room') {
+                return loadProductionRooms();
+            }
+            return loadTargetBranches();
+        }
+
+        async function loadProductionRooms() {
+            try {
+                const sourceBranchId = getSelectedSourceBranchId();
+                const select = document.getElementById('production-room-select');
+                select.innerHTML = '<option value="">-- Select Production Room --</option>';
+
+                if (!sourceBranchId) {
+                    select.disabled = true;
+                    return;
+                }
+
+                const url = new URL('/api/production-rooms', window.location.origin);
+                url.searchParams.set('branch_id', sourceBranchId);
+
+                const response = await fetch(url.toString());
+                const data = await response.json();
+
+                if (data.success && data.rooms && data.rooms.length > 0) {
+                    data.rooms.forEach(room => {
+                        const option = document.createElement('option');
+                        option.value = room.id;
+                        option.textContent = `Branch #${room.branch_id} — ${room.name}`;
+                        select.appendChild(option);
+                    });
+                    select.disabled = false;
+                } else {
+                    select.disabled = true;
+                }
+            } catch (err) {
+                console.error('Failed to load production rooms:', err);
+            }
+        }
+
+        async function loadTargetBranches() {
+            try {
+                const sourceBranchId = getSelectedSourceBranchId();
+                const select = document.getElementById('target-branch-select');
+                select.innerHTML = '<option value="">-- Select Destination Branch --</option>';
+
+                if (!sourceBranchId) {
+                    select.disabled = true;
+                    return;
+                }
+
+                const response = await fetch('/api/branches');
+                const data = await response.json();
+
+                const branches = (data.branches || []).filter(branch => {
+                    return Number(branch.id) !== Number(sourceBranchId);
+                });
+
+                if (branches.length > 0) {
+                    branches.forEach(branch => {
+                        const option = document.createElement('option');
+                        option.value = branch.id;
+                        option.textContent = `${branch.id} - ${branch.name} (${branch.code})`;
+                        select.appendChild(option);
+                    });
+                    select.disabled = false;
+                } else {
+                    select.disabled = true;
+                }
+            } catch (err) {
+                console.error('Failed to load destination branches:', err);
+            }
+        }
+
+        async function loadFlavors(branchId) {
+            try {
+                const url = new URL('/api/transfer/flavors', window.location.origin);
+                if (branchId) {
+                    url.searchParams.set('branch_id', branchId);
+                }
+
+                const response = await fetch(url.toString());
                 const data = await response.json();
 
                 const select = document.getElementById('flavor-select');
@@ -379,50 +677,43 @@
             }
         }
 
-        let currentBatches = [];
-
         async function loadBatches() {
             const flavor = document.getElementById('flavor-select').value;
-            const batchSelect = document.getElementById('batch-select');
-            const batchGroup = document.getElementById('batch-group');
             const detailsBox = document.getElementById('details-box');
             const noStockMsg = document.getElementById('no-stock-msg');
             const submitBtn = document.getElementById('submit-btn');
+            const quantity = Math.max(1, parseInt(document.getElementById('quantity-input').value || '1', 10));
+            const sourceBranchId = getSelectedSourceBranchId();
 
             // Reset
-            batchSelect.innerHTML = '<option value="">-- Select Batch --</option>';
             detailsBox.style.display = 'none';
             noStockMsg.style.display = 'none';
             submitBtn.disabled = true;
-            currentBatches = [];
+            currentStocks = [];
 
             if (!flavor) {
-                batchGroup.style.display = 'none';
+                return;
+            }
+            if (!sourceBranchId) {
+                noStockMsg.style.display = 'block';
+                noStockMsg.textContent = 'Select a source branch first.';
                 return;
             }
 
             try {
-                const response = await fetch(`/api/transfer/batches?flavor=${encodeURIComponent(flavor)}`);
+                const url = new URL('/api/transfer/batches', window.location.origin);
+                url.searchParams.set('flavor', flavor);
+                url.searchParams.set('quantity', quantity);
+                url.searchParams.set('branch_id', sourceBranchId);
+
+                const response = await fetch(url.toString());
                 const data = await response.json();
 
                 if (data.success && data.items && data.items.length > 0) {
-                    currentBatches = data.items;
-                    batchGroup.style.display = 'block';
-
-                    data.items.forEach((item, index) => {
-                        const option = document.createElement('option');
-                        option.value = index; // Store index to retrieve object later
-                        // Format: BatchNo (Exp: Date)
-                        option.textContent = `${item.batch_no} (Exp: ${item.expiry_date}) ${index === 0 ? '⭐ Nearest' : ''}`;
-                        batchSelect.appendChild(option);
-                    });
-
-                    // Auto-select first (nearest)
-                    batchSelect.value = "0";
-                    displayBatchDetails();
+                    currentStocks = data.items;
+                    renderStockSelection(data);
 
                 } else {
-                    batchGroup.style.display = 'none';
                     noStockMsg.style.display = 'block';
                     noStockMsg.textContent = 'No stock available for this flavor.';
                 }
@@ -433,51 +724,81 @@
             }
         }
 
-        function displayBatchDetails() {
-            const index = document.getElementById('batch-select').value;
+        function renderStockSelection(data) {
             const detailsBox = document.getElementById('details-box');
             const submitBtn = document.getElementById('submit-btn');
+            const summary = document.getElementById('stock-summary');
+            const list = document.getElementById('stock-list');
+            const quantity = Math.max(1, parseInt(document.getElementById('quantity-input').value || '1', 10));
 
-            if (index === "" || !currentBatches[index]) {
-                detailsBox.style.display = 'none';
-                submitBtn.disabled = true;
-                return;
-            }
-
-            const item = currentBatches[index];
-
-            document.getElementById('batch-no').textContent = item.batch_no;
-            document.getElementById('expiry-date').textContent = item.expiry_date;
-            document.getElementById('rack-no').textContent = item.rack_no;
-            document.getElementById('shelf-no').textContent = item.shelf_no;
-
+            summary.textContent = `Showing ${currentStocks.length} nearest stock item(s) for quantity ${quantity}.`;
+            list.innerHTML = currentStocks.map((item, idx) => `
+                <div style="padding:12px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:rgba(0,0,0,0.12)">
+                    <div style="font-weight:700;color:var(--accent)">#${idx + 1} ${item.batch_no || '-'}</div>
+                    <div style="font-size:0.85rem;color:var(--text2);margin-top:4px">
+                        Exp: ${item.expiry_date || '-'} | Rack: ${item.rack_no || '-'} | Shelf: ${item.shelf_no || '-'}
+                    </div>
+                    <div style="font-size:0.8rem;color:var(--text2);margin-top:4px">
+                        Branch: ${item.branch_name || currentBranchName || 'Unknown'}
+                    </div>
+                </div>
+            `).join('');
             detailsBox.style.display = 'block';
-            submitBtn.disabled = false;
+            submitBtn.disabled = currentStocks.length === 0;
+
+            if (currentStocks.length < quantity) {
+                noStockMsg.style.display = 'block';
+                noStockMsg.textContent = `Only ${currentStocks.length} stock item(s) available for quantity ${quantity}.`;
+                submitBtn.disabled = true;
+            }
         }
 
         async function submitRequest() {
-            const index = document.getElementById('batch-select').value;
-            if (index === "" || !currentBatches[index]) return;
-
-            const batch = currentBatches[index];
+            if (!currentStocks.length) return;
 
             const submitBtn = document.getElementById('submit-btn');
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
 
             const notes = document.getElementById('notes').value;
-            const flavor = document.getElementById('flavor-select').value;
+            const truckId = document.getElementById('truck-select').value;
+            const productionRoomId = document.getElementById('production-room-select').value;
+            const quantity = Math.max(1, parseInt(document.getElementById('quantity-input').value || '1', 10));
+            const sourceBranchId = getSelectedSourceBranchId();
+
+            if (!sourceBranchId) {
+                showMessage('error', 'Select a source branch first.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Transfer Request';
+                return;
+            }
+
+            const destinationBranchId = document.getElementById('target-branch-select').value;
+            if (currentDestinationMode === 'production_room' && !productionRoomId) {
+                showMessage('error', 'Select a production room first.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Transfer Request';
+                return;
+            }
+            if (currentDestinationMode === 'branch' && !destinationBranchId) {
+                showMessage('error', 'Select a destination branch first.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Transfer Request';
+                return;
+            }
 
             try {
                 const response = await fetch('/api/transfer/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        flavour: flavor, // API expects flavour
-                        batch_no: batch.batch_no,
-                        expiry_date: batch.expiry_date,
-                        rack_no: batch.rack_no,
-                        shelf_no: batch.shelf_no,
+                        quantity: quantity,
+                        stock_ids: currentStocks.map(item => item.stock_id),
+                        source_branch_id: Number(sourceBranchId),
+                        destination_type: currentDestinationMode,
+                        production_room_id: currentDestinationMode === 'production_room' ? Number(productionRoomId) : null,
+                        destination_branch_id: currentDestinationMode === 'branch' ? Number(destinationBranchId) : null,
+                        truck_id: truckId ? Number(truckId) : null,
                         notes: notes
                     })
                 });
@@ -489,8 +810,14 @@
                     // Reset form after 2 seconds
                     setTimeout(() => {
                         document.getElementById('flavor-select').value = '';
+                        document.getElementById('quantity-input').value = '1';
                         document.getElementById('notes').value = '';
+                        document.getElementById('truck-select').value = '';
                         document.getElementById('details-box').style.display = 'none';
+                        document.getElementById('production-room-select').value = '';
+                        document.getElementById('target-branch-select').value = '';
+                        currentStocks = [];
+                        submitBtn.disabled = true;
                         submitBtn.textContent = 'Submit Transfer Request';
                         hideMessage();
                     }, 2000);

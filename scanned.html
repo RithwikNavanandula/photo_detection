@@ -329,7 +329,7 @@
 const userData = localStorage.getItem('user');
 if (!userData) { window.location.href = '/'; }
 const currentUser = userData ? JSON.parse(userData) : {};
-if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
+if (currentUser.role === 'superadmin' || (currentUser.permissions || []).includes('view_admin_dashboard')) {
     document.getElementById('admin-nav-btn').style.display = '';
 }
 document.getElementById('sub-title').textContent =

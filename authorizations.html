@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authorizations - Label Scanner</title>
+    <style>
+        :root {
+            --bg: #1e1e2e;
+            --card: #2d2d44;
+            --accent: #6c63ff;
+            --accent2: #4a4a6a;
+            --text: #ffffff;
+            --text2: #a0a0b0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg) 0%, #0f0f23 100%);
+            min-height: 100vh;
+            color: var(--text);
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-height: 100vh;
+            background: #2d2d44;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 12px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #6c63ff;
+            padding: 12px 8px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #a0a0b0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+        }
+        .sidebar-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .sidebar-btn.active { background: #6c63ff; color: #fff; }
+        .sidebar-btn.danger { color: #ef4444; }
+        .sidebar-btn.danger:hover { background: rgba(239,68,68,0.2); }
+        .sidebar-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 12px 0; }
+        .sidebar-section {
+            font-size: 0.7rem;
+            color: #a0a0b0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 14px;
+            margin-top: 8px;
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 220px;
+            padding: 40px;
+            max-width: calc(100% - 220px);
+        }
+
+        .container { max-width: 1300px; margin: 0 auto; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .header h1 { font-size: 1.9rem; }
+        .header p { color: var(--text2); margin-top: 6px; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 360px minmax(0, 1fr);
+            gap: 18px;
+        }
+
+        .panel {
+            background: var(--card);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px;
+            padding: 18px;
+            box-shadow: 0 16px 42px rgba(0,0,0,0.18);
+        }
+
+        .panel h2 {
+            font-size: 1rem;
+            margin-bottom: 14px;
+        }
+
+        .search {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(0,0,0,0.18);
+            color: var(--text);
+            outline: none;
+            margin-bottom: 12px;
+        }
+
+        .user-list {
+            display: grid;
+            gap: 10px;
+            max-height: 72vh;
+            overflow: auto;
+        }
+
+        .user-card {
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            padding: 12px 14px;
+            cursor: pointer;
+        }
+
+        .user-card.active {
+            border-color: rgba(108,99,255,0.5);
+            box-shadow: 0 0 0 1px rgba(108,99,255,0.25) inset;
+        }
+
+        .user-card h3 {
+            font-size: 0.98rem;
+            margin-bottom: 4px;
+        }
+
+        .user-card p {
+            color: var(--text2);
+            font-size: 0.85rem;
+        }
+
+        .badge {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            background: rgba(108,99,255,0.15);
+            color: #c4b5fd;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .meta {
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .meta strong {
+            display: block;
+            color: var(--text2);
+            font-size: 0.74rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 4px;
+        }
+
+        .meta span { color: var(--text); font-size: 0.95rem; }
+
+        .permission-groups {
+            display: grid;
+            gap: 14px;
+        }
+
+        .perm-group {
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 14px;
+            background: rgba(255,255,255,0.03);
+        }
+
+        .perm-group h3 {
+            font-size: 0.95rem;
+            margin-bottom: 10px;
+        }
+
+        .perm-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .perm-item {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.14);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .perm-item input { margin-top: 3px; }
+        .perm-copy strong { display: block; font-size: 0.92rem; }
+        .perm-copy span { color: var(--text2); font-size: 0.8rem; }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-primary { background: linear-gradient(135deg, #6c63ff, #5a54d4); color: #fff; }
+        .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid rgba(255,255,255,0.1); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .status {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            display: none;
+        }
+        .status.success { display: block; background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); color: #86efac; }
+        .status.error { display: block; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; }
+
+        @media (max-width: 900px) {
+            .sidebar { width: 60px; padding: 20px 8px; }
+            .sidebar-logo { font-size: 0.9rem; text-align: center; }
+            .sidebar-btn span { display: none; }
+            .sidebar-section { display: none; }
+            .main-content { margin-left: 60px; max-width: calc(100% - 60px); padding: 24px 18px; }
+            .grid { grid-template-columns: 1fr; }
+            .user-list { max-height: none; }
+        }
+    </style>
+    <link rel="stylesheet" href="css/dashboard-theme.css">
+</head>
+<body class="dashboard-shell">
+    <nav class="sidebar">
+        <div class="sidebar-logo">🛠️ Admin Panel</div>
+
+        <div class="sidebar-section">Navigation</div>
+        <button class="sidebar-btn" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
+        <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
+        <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+        <button class="sidebar-btn" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn active" onclick="location.href='/authorizations'">🔐 <span>Authorizations</span></button>
+        <button class="sidebar-btn" onclick="location.href='/users'">👥 <span>Users</span></button>
+        <button class="sidebar-btn" onclick="location.href='/branches'">🏢 <span>Branches &amp; Houses</span></button>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Actions</div>
+        <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+        <button class="sidebar-btn danger" onclick="logout()">🚪 <span>Logout</span></button>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="header">
+                <div>
+                    <h1>Authorizations</h1>
+                    <p>Grant granular permissions to users without using an admin role.</p>
+                </div>
+                <div class="badge">Superadmin only</div>
+            </div>
+
+            <div class="grid">
+                <div class="panel">
+                    <h2>Users</h2>
+                    <input id="search" class="search" type="text" placeholder="Search users..." oninput="renderUserList()">
+                    <div id="user-list" class="user-list">
+                        <div class="user-card">Loading...</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2>Permission Editor</h2>
+                    <div id="empty-state" class="status" style="display:block;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text2);">
+                        Select a user to edit permissions.
+                    </div>
+
+                    <div id="editor" style="display:none;">
+                        <div class="meta-grid">
+                            <div class="meta"><strong>User</strong><span id="meta-user">-</span></div>
+                            <div class="meta"><strong>Role</strong><span id="meta-role">-</span></div>
+                            <div class="meta"><strong>Branch</strong><span id="meta-branch">-</span></div>
+                            <div class="meta"><strong>Permission Count</strong><span id="meta-count">0</span></div>
+                        </div>
+
+                        <div id="groups" class="permission-groups"></div>
+
+                        <div id="editor-actions" class="actions">
+                            <button class="btn btn-primary" onclick="savePermissions()">Save Permissions</button>
+                            <button class="btn btn-secondary" onclick="reloadUser()">Reload</button>
+                        </div>
+
+                        <div id="status" class="status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let auth = null;
+        let users = [];
+        let permissions = [];
+        let selectedUser = null;
+        const MANDATORY_PERMISSION_CODES = new Set(['view_scanner', 'sync_scans']);
+
+        function showStatus(text, type) {
+            const el = document.getElementById('status');
+            el.className = `status ${type}`;
+            el.textContent = text;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function normalizeGroup(group) {
+            return (group || 'general').replaceAll('_', ' ');
+        }
+
+        function requireSuperadmin(data) {
+            if (!data.authenticated || data.role !== 'superadmin') {
+                window.location.href = '/';
+                return false;
+            }
+            return true;
+        }
+
+        fetch('/api/check-auth')
+            .then(r => r.json())
+            .then(data => {
+                if (!requireSuperadmin(data)) return;
+                auth = data;
+                loadData();
+            });
+
+        async function loadData() {
+            const res = await fetch('/api/admin/authorizations');
+            const data = await res.json();
+            if (!data.success) {
+                alert(data.error || 'Failed to load authorizations');
+                return;
+            }
+            users = data.users || [];
+            permissions = data.permissions || [];
+            renderUserList();
+            const firstEditable = users.find(u => u.role !== 'superadmin') || users[0];
+            if (firstEditable) {
+                selectUser(firstEditable.id);
+            }
+        }
+
+        function renderUserList() {
+            const container = document.getElementById('user-list');
+            const q = (document.getElementById('search').value || '').toLowerCase().trim();
+            const filtered = users.filter(user => {
+                const hay = `${user.name || ''} ${user.username || ''} ${user.branch_name || ''}`.toLowerCase();
+                return !q || hay.includes(q);
+            });
+
+            if (!filtered.length) {
+                container.innerHTML = '<div class="user-card">No matching users.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(user => `
+                <div class="user-card ${selectedUser && selectedUser.id === user.id ? 'active' : ''}" onclick="selectUser(${user.id})">
+                    <h3>${escapeHtml(user.name || user.username)}</h3>
+                    <p>@${escapeHtml(user.username)}</p>
+                    <p>${escapeHtml(user.branch_name || 'No branch')}</p>
+                    <span class="badge">${escapeHtml(user.role)}</span>
+                </div>
+            `).join('');
+        }
+
+        async function selectUser(id) {
+            const user = users.find(u => u.id === id);
+            if (!user) return;
+            selectedUser = user;
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('editor').style.display = 'block';
+            document.getElementById('meta-user').textContent = `@${user.username} (${user.name || '-'})`;
+            document.getElementById('meta-role').textContent = user.role;
+            document.getElementById('meta-branch').textContent = user.branch_name || 'All branches';
+            renderUserList();
+
+            const actions = document.getElementById('editor-actions');
+
+            if (user.role === 'superadmin') {
+                document.getElementById('groups').innerHTML = `
+                    <div class="perm-group">
+                        <h3>Superadmin</h3>
+                        <div class="perm-list">
+                            <div class="perm-item">
+                                <div class="perm-copy">
+                                    <strong>All permissions</strong>
+                                    <span>Superadmin access is implicit and cannot be changed here.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('meta-count').textContent = 'All';
+                actions.style.display = 'none';
+                document.getElementById('status').className = 'status';
+                document.getElementById('status').textContent = '';
+                return;
+            }
+
+            actions.style.display = 'flex';
+            const res = await fetch(`/api/admin/users/${id}/permissions`);
+            const data = await res.json();
+            const assigned = new Set(data.permissions || user.permissions || []);
+            document.getElementById('meta-count').textContent = String(assigned.size);
+
+            const grouped = {};
+            permissions.forEach(permission => {
+                const group = permission.permission_group || 'general';
+                if (!grouped[group]) grouped[group] = [];
+                grouped[group].push(permission);
+            });
+
+            document.getElementById('groups').innerHTML = Object.entries(grouped).map(([group, items]) => `
+                <div class="perm-group">
+                    <h3>${escapeHtml(normalizeGroup(group))}</h3>
+                    <div class="perm-list">
+                        ${items.map(permission => `
+                            <label class="perm-item">
+                                <input type="checkbox" value="${escapeHtml(permission.code)}" ${assigned.has(permission.code) || MANDATORY_PERMISSION_CODES.has(permission.code) ? 'checked' : ''} ${MANDATORY_PERMISSION_CODES.has(permission.code) ? 'disabled' : ''}>
+                                <div class="perm-copy">
+                                    <strong>${escapeHtml(permission.label)}${MANDATORY_PERMISSION_CODES.has(permission.code) ? ' (locked)' : ''}</strong>
+                                    <span>${escapeHtml(permission.description || permission.code)}</span>
+                                </div>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function reloadUser() {
+            if (!selectedUser) return;
+            await selectUser(selectedUser.id);
+        }
+
+        async function savePermissions() {
+            if (!selectedUser) return;
+            const checked = Array.from(document.querySelectorAll('#groups input[type="checkbox"]:checked'))
+                .map(input => input.value);
+            const merged = Array.from(new Set([...checked, ...MANDATORY_PERMISSION_CODES]));
+
+            try {
+                const res = await fetch(`/api/admin/users/${selectedUser.id}/permissions`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ permissions: merged })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showStatus(data.error || 'Failed to save permissions', 'error');
+                    return;
+                }
+                showStatus('Permissions saved.', 'success');
+                await loadData();
+                selectedUser = users.find(u => u.id === selectedUser.id) || selectedUser;
+                await selectUser(selectedUser.id);
+            } catch (err) {
+                showStatus('Network error while saving permissions.', 'error');
+            }
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' })
+                .then(() => window.location.href = '/');
+        }
+    </script>
+</body>
+</html>

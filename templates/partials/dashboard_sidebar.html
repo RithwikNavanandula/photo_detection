@@ -1,0 +1,34 @@
+{% macro dashboard_sidebar(active_page='admin', show_branches=False, show_csv=False, show_export=False, show_scanner=True, logo='🛠️ Admin Panel') -%}
+<nav class="sidebar">
+    <div class="sidebar-logo">{{ logo }}</div>
+
+    <div class="sidebar-section">Navigation</div>
+    <button class="sidebar-btn{{ ' active' if active_page == 'admin' else '' }}" onclick="location.href='/admin'">📊 <span>Dashboard</span></button>
+    <button class="sidebar-btn{{ ' active' if active_page == 'pivot' else '' }}" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
+    <button class="sidebar-btn{{ ' active' if active_page == 'analytics' else '' }}" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
+    <button class="sidebar-btn{{ ' active' if active_page == 'transfer' else '' }}" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+    <button class="sidebar-btn{{ ' active' if active_page == 'transfer-reports' else '' }}" onclick="location.href='/transfer-reports'">📋 <span>Transfer Reports</span></button>
+    <button class="sidebar-btn{{ ' active' if active_page == 'pending-requests' else '' }}" onclick="location.href='/pending-requests'">⏳ <span>Pending Requests</span></button>
+    <button class="sidebar-btn{{ ' active' if active_page == 'users' else '' }}" onclick="location.href='/users'">👥 <span>Users</span></button>
+    {% if show_branches %}
+    <button class="sidebar-btn{{ ' active' if active_page == 'branches' else '' }}" id="btn-branches" onclick="location.href='/branches'">🏢 <span>Branches</span></button>
+    {% endif %}
+
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">Actions</div>
+    {% if show_scanner %}
+    <button class="sidebar-btn" onclick="location.href='/app'">📷 <span>Scanner</span></button>
+    {% endif %}
+    {% if show_csv %}
+    <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+    <button class="sidebar-btn" onclick="document.getElementById('csv-upload').click()">📤 <span>Upload CSV</span></button>
+    {% endif %}
+    {% if show_export %}
+    <button class="sidebar-btn" onclick="downloadReport()">📥 <span>Export</span></button>
+    {% endif %}
+
+    <div style="flex:1;"></div>
+    <div class="sidebar-divider"></div>
+    <button class="sidebar-btn danger" onclick="logout()">🚪 <span>Logout</span></button>
+</nav>
+{%- endmacro %}

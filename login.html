@@ -660,8 +660,23 @@
         function redirectUser(user) {
             localStorage.setItem('user', JSON.stringify(user));
             const cb = '?t=' + Date.now();
+            const perms = new Set(user.permissions || []);
+            let target = '/app' + cb;
+            if (user.role === 'superadmin') {
+                target = '/admin' + cb;
+            } else if (perms.has('view_admin_dashboard')) {
+                target = '/admin' + cb;
+            } else if (perms.has('receive_transfer')) {
+                target = '/transfer-receipts' + cb;
+            } else if (perms.has('create_transfer')) {
+                target = '/transfer' + cb;
+            } else if (perms.has('manage_transfers')) {
+                target = '/transfer-reports' + cb;
+            } else if (perms.has('view_scanner') || perms.has('sync_scans')) {
+                target = '/app' + cb;
+            }
             window.location.replace(
-                (user.role === 'superadmin' || user.role === 'admin') ? '/admin' + cb : '/app' + cb
+                target
             );
         }
 
@@ -691,10 +706,10 @@
                     showStep('step-password');
                     document.getElementById('password').focus();
                 } else if (data.allow_otp) {
-                    // Regular user or admin with email — send OTP
+                    // Regular user or superadmin with email — send OTP
                     await doSendOtp(false);
                 } else {
-                    showErr('err-username', 'No login method available. Contact your admin.');
+                    showErr('err-username', 'No login method available. Contact your superadmin.');
                 }
             } catch (e) {
                 showErr('err-username', 'Connection error. Please try again.');
@@ -756,7 +771,7 @@
             }
         }
 
-        // ── Password login (admin) ────────────────────────────────
+        // ── Password login (superadmin) ───────────────────────────
         async function doLogin() {
             clearErr('err-password');
             const password = document.getElementById('password').value;

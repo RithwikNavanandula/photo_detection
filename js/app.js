@@ -98,8 +98,8 @@ const App = {
             const user = JSON.parse(userData);
             document.getElementById('user-name').textContent = `👤 ${user.name}`;
 
-            // Show admin button for admin/superadmin users
-            if (user.role === 'admin' || user.role === 'superadmin') {
+            // Show admin button for superadmin users
+            if (user.role === 'superadmin') {
                 const adminBtn = document.getElementById('admin-btn');
                 if (adminBtn) {
                     adminBtn.classList.remove('hidden');

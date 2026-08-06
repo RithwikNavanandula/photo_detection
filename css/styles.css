@@ -1,20 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600&display=swap');
 
 :root {
-    --bg: #f4f7fb;
-    --bg-strong: #eef4f9;
+    --bg: #f5f8fd;
+    --bg-strong: #edf3fa;
     --card: #ffffff;
     --card-soft: rgba(255, 255, 255, 0.78);
-    --accent: #1171b9;
-    --accent2: #5bb0ef;
-    --text: #16324a;
-    --text2: #6b839d;
-    --success: #1f9d63;
-    --warning: #d99822;
-    --danger: #d55a63;
-    --error: #d55a63;
-    --border: #dbe6f0;
-    --border-strong: #c9dceb;
+    --accent: #1768a6;
+    --accent2: #4f8fc1;
+    --text: #203345;
+    --text2: #71859a;
+    --success: #36a271;
+    --warning: #c99021;
+    --danger: #d85a64;
+    --error: #d85a64;
+    --border: #d6e1ec;
+    --border-strong: #c2d2e1;
     --radius: 24px;
     --shadow: 0 22px 58px rgba(16, 52, 87, 0.1);
     --shadow-soft: 0 14px 34px rgba(16, 52, 87, 0.07);
@@ -29,8 +29,8 @@
 body {
     font-family: 'Inter', sans-serif;
     background:
-        radial-gradient(circle at top left, rgba(17, 113, 185, 0.1), transparent 28%),
-        radial-gradient(circle at top right, rgba(91, 176, 239, 0.18), transparent 22%),
+        radial-gradient(circle at top left, rgba(23, 104, 166, 0.1), transparent 28%),
+        radial-gradient(circle at top right, rgba(79, 143, 193, 0.16), transparent 22%),
         linear-gradient(180deg, #f8fbfe 0%, var(--bg-strong) 100%);
     color: var(--text);
     min-height: 100vh;
@@ -43,8 +43,8 @@ body::before {
     inset: 0;
     pointer-events: none;
     background-image:
-        linear-gradient(rgba(17, 113, 185, 0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(17, 113, 185, 0.025) 1px, transparent 1px);
+        linear-gradient(rgba(23, 104, 166, 0.024) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(23, 104, 166, 0.024) 1px, transparent 1px);
     background-size: 30px 30px;
     mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 85%);
 }
@@ -80,7 +80,7 @@ body::before {
     padding: 22px 26px;
     border-radius: 30px;
     background: rgba(255, 255, 255, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.9);
     box-shadow: var(--shadow);
     backdrop-filter: blur(16px);
 }
@@ -117,7 +117,7 @@ body::before {
     font-weight: 700;
     padding: 8px 12px;
     border-radius: 999px;
-    background: #edf5fb;
+    background: #eef5fb;
     border: 1px solid var(--border);
 }
 
@@ -142,7 +142,7 @@ body::before {
 .admin-btn {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: #fff;
-    box-shadow: 0 14px 26px rgba(17, 113, 185, 0.2);
+    box-shadow: 0 14px 26px rgba(23, 104, 166, 0.2);
 }
 
 .logout-btn {
@@ -169,7 +169,7 @@ body::before {
 .results,
 .history-section {
     background: var(--card-soft);
-    border: 1px solid rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.92);
     border-radius: var(--radius);
     box-shadow: var(--shadow-soft);
     backdrop-filter: blur(14px);
@@ -226,7 +226,7 @@ body::before {
     font-weight: 800;
     text-align: center;
     cursor: pointer;
-    box-shadow: 0 18px 30px rgba(17, 113, 185, 0.18);
+    box-shadow: 0 18px 30px rgba(23, 104, 166, 0.18);
 }
 
 #file-input,
@@ -244,7 +244,7 @@ body::before {
 }
 
 .batch-btn {
-    background: linear-gradient(135deg, #4f89b8, #2b70a8) !important;
+    background: linear-gradient(135deg, #4a83b2, #2b6e9f) !important;
 }
 
 .batch-hint {
@@ -399,8 +399,8 @@ body::before {
 .field input:focus {
     outline: none;
     background: #fff;
-    border-color: rgba(17, 113, 185, 0.45);
-    box-shadow: 0 0 0 4px rgba(17, 113, 185, 0.12);
+    border-color: rgba(23, 104, 166, 0.45);
+    box-shadow: 0 0 0 4px rgba(23, 104, 166, 0.12);
 }
 
 .badge {
@@ -460,15 +460,15 @@ body::before {
 .inout-btn.active {
     border-color: transparent;
     color: #fff;
-    box-shadow: 0 14px 24px rgba(17, 113, 185, 0.18);
+    box-shadow: 0 14px 24px rgba(23, 104, 166, 0.18);
 }
 
 .inout-btn.active#btn-in {
-    background: linear-gradient(135deg, #1f9d63, #4ac07f);
+    background: linear-gradient(135deg, #36a271, #63c18d);
 }
 
 .inout-btn.active#btn-out {
-    background: linear-gradient(135deg, #e0a23a, #d27a27);
+    background: linear-gradient(135deg, #cf9430, #bb781f);
 }
 
 .actions {
@@ -492,11 +492,11 @@ body::before {
 .btn.save {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: #fff;
-    box-shadow: 0 16px 28px rgba(17, 113, 185, 0.22);
+    box-shadow: 0 16px 28px rgba(23, 104, 166, 0.22);
 }
 
 .btn.sheets {
-    background: linear-gradient(135deg, #30a955, #0f8d46);
+    background: linear-gradient(135deg, #41a771, #2c8d5d);
     color: #fff;
 }
 
@@ -526,13 +526,13 @@ body::before {
 }
 
 .btn.export.email {
-    background: linear-gradient(135deg, #ec6358, #d9483a);
+    background: linear-gradient(135deg, #d86c75, #c94e59);
     color: #fff;
     border: none;
 }
 
 .btn.sync-db {
-    background: linear-gradient(135deg, #4f89b8, #2b70a8);
+    background: linear-gradient(135deg, #4a83b2, #2b6e9f);
     color: #fff;
 }
 
@@ -602,8 +602,8 @@ body::before {
 
 .search:focus {
     outline: none;
-    border-color: rgba(17, 113, 185, 0.45);
-    box-shadow: 0 0 0 4px rgba(17, 113, 185, 0.12);
+    border-color: rgba(23, 104, 166, 0.45);
+    box-shadow: 0 0 0 4px rgba(23, 104, 166, 0.12);
     background: #fff;
 }
 
@@ -760,7 +760,7 @@ body::before {
     width: 80%;
     height: 60%;
     border: 2px dashed var(--accent);
-    background: rgba(17, 113, 185, 0.12);
+    background: rgba(23, 104, 166, 0.12);
     cursor: move;
     touch-action: none;
     min-width: 50px;
@@ -810,7 +810,7 @@ body::before {
     width: min(440px, 100%);
     padding: 26px;
     background: var(--card);
-    border: 1px solid rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.92);
     border-radius: 26px;
     box-shadow: var(--shadow);
 }
@@ -837,8 +837,8 @@ body::before {
 
 .email-field input:focus {
     outline: none;
-    border-color: rgba(17, 113, 185, 0.45);
-    box-shadow: 0 0 0 4px rgba(17, 113, 185, 0.12);
+    border-color: rgba(23, 104, 166, 0.45);
+    box-shadow: 0 0 0 4px rgba(23, 104, 166, 0.12);
     background: #fff;
 }
 
