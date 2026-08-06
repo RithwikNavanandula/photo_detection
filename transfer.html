@@ -16,6 +16,7 @@
             --success: #10b981;
             --warning: #f59e0b;
             --error: #ef4444;
+            --border: #cfd9e4;
             --sidebar: #2d2d44;
             --input-bg: #1e1e2e;
         }
@@ -314,6 +315,91 @@
             border: 1px solid var(--error);
         }
 
+        .truck-tools {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .truck-link {
+            border: none;
+            background: transparent;
+            color: var(--accent);
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .truck-link:hover {
+            text-decoration: underline;
+        }
+
+        .truck-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(13, 31, 49, 0.38);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            padding: 18px;
+        }
+
+        .truck-modal.show {
+            display: flex;
+        }
+
+        .truck-modal-card {
+            width: min(480px, 100%);
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(215, 226, 236, 0.96);
+            border-radius: 24px;
+            padding: 22px;
+            box-shadow: 0 24px 60px rgba(16, 52, 87, 0.18);
+            color: var(--text);
+        }
+
+        .truck-modal-card h3 {
+            margin-bottom: 8px;
+            color: var(--accent);
+        }
+
+        .truck-modal-card p {
+            color: var(--text2);
+            margin-bottom: 16px;
+            font-size: 0.92rem;
+        }
+
+        .truck-modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .truck-modal-actions button {
+            flex: 1;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .truck-modal-actions .primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: #fff;
+        }
+
+        .truck-modal-actions .secondary {
+            background: #f4f8fc;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
         @media (max-width: 720px) {
             .card {
                 padding: 22px 18px;
@@ -342,6 +428,7 @@
         <button class="sidebar-btn" onclick="location.href='/pivot'">📈 <span>Ledger Entries</span></button>
         <button class="sidebar-btn" onclick="location.href='/analytics'">📉 <span>Analytics</span></button>
         <button class="sidebar-btn active" onclick="location.href='/transfer'">🚚 <span>Transfer Request</span></button>
+        <button class="sidebar-btn" onclick="location.href='/trucks'">🚛 <span>Trucks</span></button>
         <button class="sidebar-btn" onclick="location.href='/authorizations'">🔐 <span>Authorizations</span></button>
         <button class="sidebar-btn" onclick="location.href='/transfer-reports'">📋 <span>Transfer
                 Reports</span></button>
@@ -394,9 +481,13 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Truck No (Optional)</label>
-                    <select id="truck-select" class="form-control">
+                    <div class="truck-tools">
+                        <label>Truck No (Optional)</label>
+                        <button type="button" class="truck-link" onclick="openTruckModal()">+ Add truck</button>
+                    </div>
+                    <select id="truck-select" class="form-control" onchange="handleTruckSelectChange()">
                         <option value="">-- No truck selected --</option>
+                        <option value="__add_truck__">+ Add a truck...</option>
                     </select>
                     <span class="field-note">Optional. Pick a truck if this transfer is assigned to one.</span>
                 </div>
@@ -454,6 +545,26 @@
         </div>
     </div>
 
+    <div id="truck-modal" class="truck-modal" onclick="closeTruckModal(event)">
+        <div class="truck-modal-card" onclick="event.stopPropagation()">
+            <h3>Add Truck</h3>
+            <p>Create a new truck entry and attach it to this transfer if needed.</p>
+            <div class="form-group">
+                <label>Truck No</label>
+                <input id="truck-no-input" class="form-control" type="text" placeholder="e.g. T-1024">
+            </div>
+            <div class="form-group">
+                <label>Note (Optional)</label>
+                <input id="truck-note-input" class="form-control" type="text" placeholder="Driver, company, color, etc.">
+            </div>
+            <div id="truck-modal-message" class="message" style="display:none;margin-top:0;"></div>
+            <div class="truck-modal-actions">
+                <button type="button" class="secondary" onclick="closeTruckModal()">Cancel</button>
+                <button type="button" class="primary" onclick="saveTruck()">Save Truck</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentBranchId = null;
         let currentBranchName = '';
@@ -461,6 +572,7 @@
         let currentDestinationMode = 'production_room';
         let currentStocks = [];
         let selectedSourceBranchId = null;
+        let selectedTruckValue = '';
 
         // Check authentication
         fetch('/api/check-auth')
@@ -499,7 +611,11 @@
 
                 if (!select) return;
 
-                select.innerHTML = '<option value="">-- No truck selected --</option>';
+                const previous = selectedTruckValue;
+                select.innerHTML = [
+                    '<option value="">-- No truck selected --</option>',
+                    '<option value="__add_truck__">+ Add a truck...</option>'
+                ].join('');
 
                 if (data.success && Array.isArray(data.trucks)) {
                     data.trucks.forEach(truck => {
@@ -509,8 +625,80 @@
                         select.appendChild(option);
                     });
                 }
+
+                if (previous) {
+                    select.value = String(previous);
+                }
             } catch (err) {
                 console.error('Failed to load trucks:', err);
+            }
+        }
+
+        function handleTruckSelectChange() {
+            const select = document.getElementById('truck-select');
+            if (!select) return;
+
+            if (select.value === '__add_truck__') {
+                openTruckModal();
+                select.value = selectedTruckValue ? String(selectedTruckValue) : '';
+                return;
+            }
+
+            selectedTruckValue = select.value;
+        }
+
+        function openTruckModal() {
+            document.getElementById('truck-modal-message').style.display = 'none';
+            document.getElementById('truck-no-input').value = '';
+            document.getElementById('truck-note-input').value = '';
+            document.getElementById('truck-modal').classList.add('show');
+            setTimeout(() => document.getElementById('truck-no-input').focus(), 50);
+        }
+
+        function closeTruckModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('truck-modal').classList.remove('show');
+        }
+
+        async function saveTruck() {
+            const truckNo = document.getElementById('truck-no-input').value.trim();
+            const note = document.getElementById('truck-note-input').value.trim();
+            const msg = document.getElementById('truck-modal-message');
+
+            if (!truckNo) {
+                msg.className = 'message error';
+                msg.textContent = 'Truck number is required.';
+                msg.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/trucks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ truck_no: truckNo, note })
+                });
+                const data = await response.json();
+
+                if (!data.success) {
+                    msg.className = 'message error';
+                    msg.textContent = data.error || 'Failed to add truck.';
+                    msg.style.display = 'block';
+                    return;
+                }
+
+                selectedTruckValue = String(data.truck.id);
+                closeTruckModal();
+                await loadTrucks();
+                const select = document.getElementById('truck-select');
+                if (select) {
+                    select.value = String(data.truck.id);
+                }
+                showMessage('success', `Truck ${data.truck.truck_no} added.`);
+            } catch (err) {
+                msg.className = 'message error';
+                msg.textContent = 'Network error while adding truck.';
+                msg.style.display = 'block';
             }
         }
 
@@ -813,6 +1001,7 @@
                         document.getElementById('quantity-input').value = '1';
                         document.getElementById('notes').value = '';
                         document.getElementById('truck-select').value = '';
+                        selectedTruckValue = '';
                         document.getElementById('details-box').style.display = 'none';
                         document.getElementById('production-room-select').value = '';
                         document.getElementById('target-branch-select').value = '';

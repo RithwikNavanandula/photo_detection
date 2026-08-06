@@ -2257,6 +2257,10 @@ def serve_pending_requests():
         return redirect('/app')
     return send_from_directory('.', 'pending-requests.html')
 
+@app.route('/trucks')
+def serve_trucks():
+    return _protected_page('trucks.html', 'create_transfer')
+
 @app.route('/api/transfer/flavors', methods=['GET'])
 @login_required
 def get_transfer_flavors():
@@ -2605,13 +2609,92 @@ def get_trucks():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT id, truck_no, note
+        SELECT id, truck_no, note, created_at
         FROM trucks
         ORDER BY truck_no ASC, id ASC
     ''')
     trucks = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'success': True, 'trucks': trucks})
+
+@app.route('/api/trucks', methods=['POST'])
+@login_required
+def add_truck():
+    """Add a truck to the lookup table."""
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    data = request.get_json() or {}
+    truck_no = str(data.get('truck_no', '')).strip()
+    note = str(data.get('note', '')).strip()
+
+    if not truck_no:
+        return jsonify({'success': False, 'error': 'Truck number is required'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM trucks WHERE LOWER(truck_no) = LOWER(?)', (truck_no,))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'error': 'Truck number already exists'}), 400
+
+    cursor.execute('INSERT INTO trucks (truck_no, note) VALUES (?, ?)', (truck_no, note or None))
+    truck_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'success': True,
+        'truck': {
+            'id': truck_id,
+            'truck_no': truck_no,
+            'note': note,
+        }
+    })
+
+@app.route('/api/trucks/<int:truck_id>', methods=['PUT', 'DELETE'])
+@login_required
+def manage_truck(truck_id):
+    """Update or delete a truck entry."""
+    if not _can_access_permission('create_transfer'):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, truck_no FROM trucks WHERE id = ?', (truck_id,))
+    truck = cursor.fetchone()
+    if not truck:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Truck not found'}), 404
+
+    if request.method == 'DELETE':
+        cursor.execute('SELECT COUNT(*) AS count FROM transfer_requests WHERE truck_id = ?', (truck_id,))
+        if cursor.fetchone()['count']:
+            conn.close()
+            return jsonify({'success': False, 'error': 'This truck is used in transfer requests and cannot be deleted'}), 400
+
+        cursor.execute('DELETE FROM trucks WHERE id = ?', (truck_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+    data = request.get_json() or {}
+    truck_no = str(data.get('truck_no', '')).strip()
+    note = str(data.get('note', '')).strip()
+
+    if not truck_no:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Truck number is required'}), 400
+
+    cursor.execute('SELECT id FROM trucks WHERE LOWER(truck_no) = LOWER(?) AND id != ?', (truck_no, truck_id))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'error': 'Truck number already exists'}), 400
+
+    cursor.execute('UPDATE trucks SET truck_no = ?, note = ? WHERE id = ?', (truck_no, note or None, truck_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'truck': {'id': truck_id, 'truck_no': truck_no, 'note': note}})
 
 @app.route('/api/transfer/requests', methods=['GET'])
 @login_required

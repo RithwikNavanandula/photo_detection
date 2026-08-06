@@ -6,15 +6,11 @@
 {% block body %}
 {{ shell.dashboard_sidebar(
     active_page=active_page,
-    show_branches=show_branches|default(false),
-    show_csv=show_csv|default(false),
-    show_export=show_export|default(false),
-    show_scanner=show_scanner|default(true),
     logo=sidebar_logo|default('🛠️ Admin Panel')
 ) }}
 <div class="main-content">
     <div class="container">
-        {% block page_content %}{% endblock %}
+        {% block content %}{% endblock %}
     </div>
 </div>
 {% endblock %}
