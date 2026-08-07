@@ -677,12 +677,12 @@ def login():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Query user with branch info
+    # Query user with branch info (username match is case-insensitive)
     cursor.execute('''
         SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name, b.code as branch_code
         FROM users u
         LEFT JOIN branches b ON u.branch_id = b.id
-        WHERE u.username = ? AND u.password = ?
+        WHERE LOWER(u.username) = LOWER(?) AND u.password = ?
     ''', (username, hash_password(password)))
     user = cursor.fetchone()
     conn.close()
@@ -755,12 +755,14 @@ def send_otp_email(to_email, otp, username):
 
 
 def resolve_user(identifier):
-    """Look up a user by username OR email. Returns the sqlite Row or None."""
+    """Look up a user by username OR email (case-insensitive). Returns the sqlite Row or None."""
     conn = get_db()
     cursor = conn.cursor()
-    # Try username first, then email
     cursor.execute(
-        'SELECT username, name, role, email, active FROM users WHERE username = ? OR LOWER(email) = LOWER(?)',
+        '''
+        SELECT username, name, role, email, active FROM users
+        WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+        ''',
         (identifier, identifier)
     )
     user = cursor.fetchone()
@@ -812,12 +814,6 @@ def send_otp():
     if not username:
         return jsonify({'success': False, 'error': 'Username required'}), 400
 
-    # Rate limit: 1 OTP per 60s
-    existing = otp_get(username)
-    if existing and time.time() - existing.get('sent_at', 0) < 60:
-        wait = int(60 - (time.time() - existing['sent_at']))
-        return jsonify({'success': False, 'error': f'Please wait {wait}s before requesting another OTP'}), 429
-
     user = resolve_user(username)
 
     if not user:
@@ -829,8 +825,15 @@ def send_otp():
     if not email or '@' not in email or email.endswith('@temp.labelscan.local'):
         return jsonify({'success': False, 'error': 'No email on file. Contact your superadmin.'}), 400
 
-    # Use canonical username as OTP key
+    # Use canonical username as OTP key (case-insensitive resolve above)
     canon = user['username']
+
+    # Rate limit: 1 OTP per 60s (keyed by canonical username)
+    existing = otp_get(canon)
+    if existing and time.time() - existing.get('sent_at', 0) < 60:
+        wait = int(60 - (time.time() - existing['sent_at']))
+        return jsonify({'success': False, 'error': f'Please wait {wait}s before requesting another OTP'}), 429
+
     otp = str(random.randint(100000, 999999))
     now = time.time()
     otp_set(canon, otp, expires=now + 300, sent_at=now)
@@ -838,7 +841,12 @@ def send_otp():
     sent = send_otp_email(email, otp, user['name'] or canon)
     if not sent:
         otp_delete(canon)
-        return jsonify({'success': False, 'error': 'Failed to send email. Try again later.'}), 500
+        return jsonify({
+            'success': False,
+            'error': 'Failed to send email. Try again later.',
+            'allow_password_fallback': True,
+            'username': canon,
+        }), 500
 
     local, domain = email.split('@', 1)
     masked = local[:2] + '***' + local[-2:] + '@' + domain if len(local) > 4 else '***@' + domain
@@ -855,25 +863,30 @@ def verify_otp():
     if not username or not otp_input:
         return jsonify({'success': False, 'error': 'Username and OTP required'}), 400
 
-    record = otp_get(username)
+    resolved = resolve_user(username)
+    if not resolved:
+        return jsonify({'success': False, 'error': 'No account found with that username or email'}), 404
+    canon = resolved['username']
+
+    record = otp_get(canon)
     if not record:
         return jsonify({'success': False, 'error': 'No OTP found. Please request a new one.'}), 400
 
     if time.time() > record['expires']:
-        otp_delete(username)
+        otp_delete(canon)
         return jsonify({'success': False, 'error': 'OTP has expired. Please request a new one.'}), 400
 
-    otp_increment_attempts(username)
-    record = otp_get(username)  # re-fetch updated attempts
+    otp_increment_attempts(canon)
+    record = otp_get(canon)  # re-fetch updated attempts
     if record['attempts'] > 5:
-        otp_delete(username)
+        otp_delete(canon)
         return jsonify({'success': False, 'error': 'Too many attempts. Please request a new OTP.'}), 400
 
     if otp_input != record['otp']:
         return jsonify({'success': False, 'error': f'Incorrect OTP. {5 - record["attempts"]} attempts left.'}), 401
 
     # OTP correct — clear store and log in
-    otp_delete(username)
+    otp_delete(canon)
 
     conn = get_db()
     cursor = conn.cursor()
@@ -881,8 +894,8 @@ def verify_otp():
         SELECT u.id, u.username, u.name, u.role, u.active, u.branch_id, b.name as branch_name, b.code as branch_code
         FROM users u
         LEFT JOIN branches b ON u.branch_id = b.id
-        WHERE u.username = ? AND u.active = 1
-    ''', (username,))
+        WHERE LOWER(u.username) = LOWER(?) AND u.active = 1
+    ''', (canon,))
     user = cursor.fetchone()
     conn.close()
 
@@ -1085,7 +1098,7 @@ def register():
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+    cursor.execute('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', (username,))
     if cursor.fetchone():
         conn.close()
         return jsonify({'success': False, 'error': 'Username already taken'}), 400

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
-import { apiJson } from "@/lib/api";
+import { ApiError, apiJson } from "@/lib/api";
 import { loginMethodSchema, userSchema } from "@/lib/schemas";
 import { postRedirectTarget } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -15,6 +15,13 @@ import { Label } from "@/components/ui/label";
 import { z } from "zod";
 
 type Step = "username" | "password" | "otp" | "register";
+
+function shouldFallbackToPassword(err: unknown): boolean {
+  // Rate limits / auth issues should stay on OTP; mail/server failures fall back.
+  if (!(err instanceof ApiError)) return true;
+  if (err.status === 429 || err.status === 401 || err.status === 404) return false;
+  return err.status >= 500 || err.status === 400;
+}
 
 export default function LoginPage() {
   const { setUserLocal, isAuthenticated, loading, user } = useAuth();
@@ -48,6 +55,18 @@ export default function LoginPage() {
       .catch(() => undefined);
   }, []);
 
+  function goToPasswordFallback(canon: string, reason?: string) {
+    if (canon) setUsername(canon);
+    setError("");
+    setHint(
+      reason
+        ? `${reason} Signing in as ${canon || "your account"} with password instead.`
+        : `Email login unavailable. Signing in as ${canon || "your account"} with password.`
+    );
+    setStep("password");
+    toast.message("Email login failed — use your password");
+  }
+
   async function checkLoginMethod() {
     setError("");
     if (!username.trim()) {
@@ -67,6 +86,9 @@ export default function LoginPage() {
         setStep("password");
       } else if (data.allow_otp) {
         await sendOtp(data.username || username.trim());
+      } else if (data.allow_password) {
+        setHint(`Signing in as ${data.username}. Enter your password.`);
+        setStep("password");
       } else {
         setError("No login method available. Contact your superadmin.");
       }
@@ -96,6 +118,15 @@ export default function LoginPage() {
       setStep("otp");
       setOtp("");
     } catch (e) {
+      const payload =
+        e instanceof ApiError && typeof e.payload === "object" && e.payload
+          ? (e.payload as { username?: string; error?: string; allow_password_fallback?: boolean })
+          : null;
+      const canon = payload?.username || user;
+      if (shouldFallbackToPassword(e) || payload?.allow_password_fallback) {
+        goToPasswordFallback(canon, payload?.error || (e instanceof Error ? e.message : undefined));
+        return;
+      }
       setError(e instanceof Error ? e.message : "Connection error");
     } finally {
       setBusy(false);

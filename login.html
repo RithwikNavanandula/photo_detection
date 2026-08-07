@@ -719,6 +719,14 @@
         }
 
         // ── OTP: send ─────────────────────────────────────────────
+        function fallbackToPassword(message) {
+            document.getElementById('pwd-hint').textContent =
+                (message ? message + ' ' : '') +
+                `Signing in as ${currentUser} with password instead.`;
+            showStep('step-password');
+            document.getElementById('password').focus();
+        }
+
         async function doSendOtp(isResend) {
             clearErr('err-otp');
             if (isResend) setLoading('btn-verify', true, 'Verify & Sign in');
@@ -728,8 +736,19 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: currentUser })
                 });
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 if (!data.success) {
+                    if (data.username) currentUser = data.username;
+                    // Mail/server failures → password for all users; keep OTP for rate-limit / auth errors
+                    const fallback =
+                        data.allow_password_fallback ||
+                        res.status >= 500 ||
+                        res.status === 400 ||
+                        (!res.ok && res.status !== 429 && res.status !== 401 && res.status !== 404);
+                    if (fallback) {
+                        fallbackToPassword(data.error || 'Email login unavailable.');
+                        return;
+                    }
                     if (isResend) showErr('err-otp', data.error);
                     else showErr('err-username', data.error);
                     return;
@@ -741,8 +760,7 @@
                 document.getElementById('otp-input').value = '';
                 document.getElementById('otp-input').focus();
             } catch (e) {
-                const errId = isResend ? 'err-otp' : 'err-username';
-                showErr(errId, 'Connection error. Please try again.');
+                fallbackToPassword('Email login unavailable.');
             } finally {
                 if (isResend) setLoading('btn-verify', false, 'Verify & Sign in');
             }
