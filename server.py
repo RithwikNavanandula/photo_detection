@@ -11,6 +11,8 @@ import hashlib
 import os
 import csv
 import io
+import base64
+import uuid
 import requests
 import random
 import time
@@ -109,6 +111,13 @@ DB_PATH = os.getenv('DB_PATH') or os.path.join(BASE_DIR, 'users.db')
 _db_parent = os.path.dirname(os.path.abspath(DB_PATH))
 if _db_parent:
     os.makedirs(_db_parent, exist_ok=True)
+
+# Scan photos live next to the DB so Render's persistent disk keeps them
+SCAN_PHOTOS_DIR = os.getenv('SCAN_PHOTOS_DIR') or os.path.join(
+    _db_parent or BASE_DIR, 'scan_photos'
+)
+os.makedirs(SCAN_PHOTOS_DIR, exist_ok=True)
+MAX_SCAN_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -240,6 +249,65 @@ def hash_password(password):
 def _table_has_column(cursor, table_name, column_name):
     cursor.execute(f"PRAGMA table_info({table_name})")
     return any(row['name'] == column_name for row in cursor.fetchall())
+
+def _ensure_scan_photo_column(cursor):
+    """Add photo_path to scans if missing (existing DBs)."""
+    if not _table_has_column(cursor, 'scans', 'photo_path'):
+        cursor.execute('ALTER TABLE scans ADD COLUMN photo_path TEXT')
+
+def _decode_scan_image(image_data):
+    """Accept a data URL or raw base64 string; return image bytes or None."""
+    if not image_data or not isinstance(image_data, str):
+        return None
+    raw = image_data.strip()
+    if not raw:
+        return None
+    if raw.startswith('data:'):
+        try:
+            raw = raw.split(',', 1)[1]
+        except IndexError:
+            return None
+    try:
+        data = base64.b64decode(raw, validate=False)
+    except Exception:
+        return None
+    if not data or len(data) > MAX_SCAN_PHOTO_BYTES:
+        return None
+    return data
+
+def _save_scan_photo(image_data):
+    """Persist scan photo to disk; return stored filename or None."""
+    data = _decode_scan_image(image_data)
+    if not data:
+        return None
+    os.makedirs(SCAN_PHOTOS_DIR, exist_ok=True)
+    filename = f"scan_{uuid.uuid4().hex}_{int(time.time())}.jpg"
+    path = os.path.join(SCAN_PHOTOS_DIR, filename)
+    try:
+        with open(path, 'wb') as f:
+            f.write(data)
+    except OSError as e:
+        print(f'[Scan Photo Save Error]: {e}')
+        return None
+    return filename
+
+def _scan_photo_abs(filename):
+    if not filename:
+        return None
+    safe = os.path.basename(str(filename))
+    full = os.path.join(SCAN_PHOTOS_DIR, safe)
+    if os.path.isfile(full):
+        return full
+    return None
+
+def _delete_scan_photo(filename):
+    full = _scan_photo_abs(filename)
+    if not full:
+        return
+    try:
+        os.remove(full)
+    except OSError:
+        pass
 
 def _get_or_create_stock_id(cursor, scan_data, branch_id):
     """Return a stock row ID for the supplied item identity, creating it if needed."""
@@ -374,13 +442,20 @@ def _ensure_inventory_tables(cursor):
             movement TEXT DEFAULT 'IN',
             synced_by TEXT,
             branch_id INTEGER,
-            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            photo_path TEXT
         )
     ''')
+    _ensure_scan_photo_column(cursor)
 
 def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True):
     """Shared scan sync implementation for both user and admin endpoints."""
+    _ensure_scan_photo_column(cursor)
+
     if replace:
+        cursor.execute('SELECT photo_path FROM scans WHERE photo_path IS NOT NULL')
+        for row in cursor.fetchall():
+            _delete_scan_photo(row['photo_path'])
         cursor.execute('DELETE FROM scans')
         cursor.execute('DELETE FROM stock')
 
@@ -417,11 +492,15 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
                         )
                     }
 
+        photo_path = _save_scan_photo(
+            scan.get('imageData') or scan.get('photo') or scan.get('image')
+        )
+
         cursor.execute('''
             INSERT INTO scans (
                 stock_id, timestamp, batch_no, mfg_date, expiry_date,
-                flavour, rack_no, shelf_no, movement, synced_by, branch_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                flavour, rack_no, shelf_no, movement, synced_by, branch_id, photo_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             stock_id,
             timestamp,
@@ -433,7 +512,8 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
             scan.get('shelfNo', ''),
             movement,
             user,
-            branch_id
+            branch_id,
+            photo_path
         ))
         synced += 1
 
@@ -556,9 +636,11 @@ def init_db():
             movement TEXT DEFAULT 'IN',
             synced_by TEXT,
             branch_id INTEGER REFERENCES branches(id),
-            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            photo_path TEXT
         )
     ''')
+    _ensure_scan_photo_column(cursor)
 
     _ensure_truck_table(cursor)
 
@@ -1553,14 +1635,20 @@ def admin_dashboard():
         order_clause = "ORDER BY expiry_date DESC"
 
     # Get recent activity (last 15, filtered by branch)
+    _ensure_scan_photo_column(cursor)
     activity_query = f'''
-        SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf, movement, expiry_date 
+        SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf,
+               movement, expiry_date, photo_path
         FROM scans{branch_where}
         {order_clause}
         LIMIT 15
     '''
     cursor.execute(activity_query, branch_params)
-    activity = [dict(row) for row in cursor.fetchall()]
+    activity = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item['has_photo'] = bool(item.pop('photo_path', None))
+        activity.append(item)
     
     conn.close()
     
@@ -2149,11 +2237,47 @@ def delete_scan():
     
     conn = get_db()
     cursor = conn.cursor()
+    _ensure_scan_photo_column(cursor)
+    cursor.execute('SELECT photo_path FROM scans WHERE id = ?', (scan_id,))
+    row = cursor.fetchone()
+    if row and row['photo_path']:
+        _delete_scan_photo(row['photo_path'])
     cursor.execute('DELETE FROM scans WHERE id = ?', (scan_id,))
     conn.commit()
     conn.close()
     
     return jsonify({'success': True})
+
+@app.route('/api/scans/<int:scan_id>/photo', methods=['GET'])
+@login_required
+def get_scan_photo(scan_id):
+    """Serve the saved photo for a scan (if present)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    _ensure_scan_photo_column(cursor)
+    cursor.execute('SELECT photo_path, branch_id FROM scans WHERE id = ?', (scan_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row or not row['photo_path']:
+        return jsonify({'success': False, 'error': 'Photo not found'}), 404
+
+    role = session.get('role')
+    if role != 'superadmin':
+        user_branch = session.get('branch_id')
+        if user_branch is not None and row['branch_id'] is not None and int(row['branch_id']) != int(user_branch):
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    abs_path = _scan_photo_abs(row['photo_path'])
+    if not abs_path:
+        return jsonify({'success': False, 'error': 'Photo file missing'}), 404
+
+    return send_from_directory(
+        SCAN_PHOTOS_DIR,
+        os.path.basename(abs_path),
+        mimetype='image/jpeg',
+        max_age=86400,
+    )
 
 @app.route('/admin')
 def serve_admin():
@@ -2216,12 +2340,13 @@ def get_pivot_data():
     
     conn = get_db()
     cursor = conn.cursor()
+    _ensure_scan_photo_column(cursor)
     
     # Base query - match CSV export columns
     query = '''
         SELECT s.id, s.timestamp, s.batch_no, s.mfg_date, s.expiry_date, 
                s.flavour, s.rack_no, s.shelf_no, s.movement, s.branch_id, 
-               s.synced_by, b.name as branch_name,
+               s.synced_by, s.photo_path, b.name as branch_name,
                tr.requested_by_name,
                tr.source_branch_id, tr.production_room_id,
                sb.name as source_branch_name,
@@ -2242,7 +2367,11 @@ def get_pivot_data():
     query += ' ORDER BY s.timestamp DESC'
     
     cursor.execute(query, params)
-    scans = [dict(row) for row in cursor.fetchall()]
+    scans = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item['has_photo'] = bool(item.pop('photo_path', None))
+        scans.append(item)
     conn.close()
     
     return jsonify({'success': True, 'scans': scans})

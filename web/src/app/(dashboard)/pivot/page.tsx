@@ -2,11 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, RefreshCw, Search } from "lucide-react";
+import { Download, Eye, RefreshCw, Search } from "lucide-react";
 import { AuthGuard } from "@/components/layout/auth-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -45,6 +52,7 @@ type PivotScan = {
   requested_by_name: string | null;
   source_branch_name: string | null;
   production_room_name: string | null;
+  has_photo?: boolean;
 };
 
 function parseLooseDate(value?: string | null) {
@@ -71,6 +79,8 @@ export default function PivotPage() {
   const [search, setSearch] = useState("");
   const [movement, setMovement] = useState("all");
   const [sort, setSort] = useState("newest");
+  const [photoScan, setPhotoScan] = useState<PivotScan | null>(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
 
   const branchesQuery = useQuery({
     queryKey: ["branches"],
@@ -125,6 +135,12 @@ export default function PivotPage() {
     });
     return sorted;
   }, [data, search, movement, sort]);
+
+  function openPhoto(row: PivotScan) {
+    if (!row.has_photo) return;
+    setPhotoFailed(false);
+    setPhotoScan(row);
+  }
 
   return (
     <AuthGuard permission="view_pivot">
@@ -222,6 +238,7 @@ export default function PivotPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[72px]">Image</TableHead>
                     <TableHead>Timestamp</TableHead>
                     <TableHead>Batch</TableHead>
                     <TableHead>Flavour</TableHead>
@@ -239,13 +256,39 @@ export default function PivotPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-muted-foreground">
+                      <TableCell colSpan={13} className="text-muted-foreground">
                         No ledger rows
                       </TableCell>
                     </TableRow>
                   ) : (
                     filtered.map((row) => (
                       <TableRow key={row.id}>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={!row.has_photo}
+                            title={
+                              row.has_photo
+                                ? "View scan photo"
+                                : "No photo saved for this entry"
+                            }
+                            onClick={() => openPhoto(row)}
+                          >
+                            <Eye
+                              className={`h-4 w-4 ${
+                                row.has_photo
+                                  ? "text-primary"
+                                  : "text-muted-foreground"
+                              }`}
+                            />
+                            <span className="sr-only">
+                              {row.has_photo ? "View photo" : "No photo"}
+                            </span>
+                          </Button>
+                        </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {row.timestamp || "—"}
                         </TableCell>
@@ -278,6 +321,47 @@ export default function PivotPage() {
             )}
           </CardContent>
         </Card>
+
+        <Dialog
+          open={Boolean(photoScan)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPhotoScan(null);
+              setPhotoFailed(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Scan photo</DialogTitle>
+              <DialogDescription>
+                {[
+                  photoScan?.batch_no,
+                  photoScan?.flavour,
+                  photoScan?.timestamp,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Saved label image for this ledger entry"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-hidden rounded-lg border bg-muted/40">
+              {photoScan && !photoFailed ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={photoScan.id}
+                  src={`/api/scans/${photoScan.id}/photo`}
+                  alt={`Scan photo for ${photoScan.batch_no || photoScan.id}`}
+                  className="mx-auto max-h-[70vh] w-full object-contain"
+                  onError={() => setPhotoFailed(true)}
+                />
+              ) : (
+                <p className="p-8 text-center text-sm text-muted-foreground">
+                  Photo could not be loaded.
+                </p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AuthGuard>
   );

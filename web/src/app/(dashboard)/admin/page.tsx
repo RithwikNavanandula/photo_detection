@@ -63,6 +63,7 @@ type ActivityRow = {
   shelf: string | null;
   movement: string;
   expiry_date: string | null;
+  has_photo?: boolean;
 };
 
 type DashboardResponse = {
@@ -428,6 +429,7 @@ export default function AdminDashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Photo</TableHead>
                   <TableHead>Time</TableHead>
                   <TableHead>Batch</TableHead>
                   <TableHead>Rack</TableHead>
@@ -441,7 +443,7 @@ export default function AdminDashboardPage() {
                 {activity.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={canManage ? 7 : 6}
+                      colSpan={canManage ? 8 : 7}
                       className="text-muted-foreground"
                     >
                       No recent activity
@@ -450,6 +452,26 @@ export default function AdminDashboardPage() {
                 ) : (
                   activity.map((row) => (
                     <TableRow key={row.id}>
+                      <TableCell>
+                        {row.has_photo ? (
+                          <a
+                            href={`/api/scans/${row.id}/photo`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block"
+                            title="Open scan photo"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/scans/${row.id}/photo`}
+                              alt=""
+                              className="h-10 w-10 rounded object-cover"
+                            />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {row.timestamp || "—"}
                       </TableCell>

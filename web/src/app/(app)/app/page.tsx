@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { OCR } from "@/lib/ocr";
 import { Parser } from "@/lib/label-parser";
 import { Storage, type LocalScan } from "@/lib/storage";
+import { compressDataUrl } from "@/lib/image";
 import { apiJson } from "@/lib/api";
 
 const DEFAULT_RACKS = ["Rack 1", "Rack 2", "Rack 3", "Rack 4", "Rack 5"];
@@ -106,7 +107,8 @@ export default function ScannerPage() {
     setStatus("Preparing image...");
     try {
       const dataUrl = await fileToDataUrl(file);
-      setPreview(dataUrl);
+      const compressed = await compressDataUrl(dataUrl);
+      setPreview(compressed);
 
       const text = await OCR.process(file, setStatus);
       const parsed = Parser.parse(text);
@@ -126,7 +128,7 @@ export default function ScannerPage() {
       setMovement("IN");
 
       if (continuous) {
-        await saveScan(nextForm, true);
+        await saveScan(nextForm, true, compressed);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Scan failed");
@@ -171,7 +173,11 @@ export default function ScannerPage() {
     }
   }
 
-  async function saveScan(override?: typeof form, skipValidation = false) {
+  async function saveScan(
+    override?: typeof form,
+    skipValidation = false,
+    imageOverride?: string
+  ) {
     const data = override || form;
     if (!hasScan && !override) {
       toast.error("Nothing to save");
@@ -185,8 +191,13 @@ export default function ScannerPage() {
     rememberLocation("rackLocations", data.rackNo, DEFAULT_RACKS);
     rememberLocation("shelfLocations", data.shelfNo, DEFAULT_SHELVES);
 
+    const imageData = imageOverride || preview || undefined;
+    // Continuous mode passes override form before React state catches up — use a fresh timestamp
+    const scanTimestamp =
+      (override ? null : timestamp) || new Date().toLocaleString("en-IN");
+
     const scanData = {
-      timestamp: timestamp || new Date().toLocaleString("en-IN"),
+      timestamp: scanTimestamp,
       batchNo: data.batchNo,
       mfgDate: data.mfgDate,
       expiryDate: data.expiryDate,
@@ -194,6 +205,7 @@ export default function ScannerPage() {
       rackNo: data.rackNo,
       shelfNo: data.shelfNo,
       movement,
+      imageData,
     };
 
     const local: LocalScan = {
@@ -201,6 +213,7 @@ export default function ScannerPage() {
       rawText: data.rawText,
       confidence,
       synced: false,
+      imageData,
     };
 
     try {
@@ -267,6 +280,7 @@ export default function ScannerPage() {
           rackNo: s.rackNo || "",
           shelfNo: s.shelfNo || "",
           movement: s.movement || "IN",
+          imageData: s.imageData || undefined,
         })),
         user: user?.name || "Unknown",
         branch_id: user?.branch_id,
@@ -488,14 +502,28 @@ export default function ScannerPage() {
                   key={s.id ?? `${s.timestamp}-${s.batchNo}`}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm"
                 >
-                  <div>
-                    <p className="font-medium">
-                      {s.batchNo || "No batch"} · {s.flavour || "Unknown"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {s.mfgDate || "—"} → {s.expiryDate || "—"} · {s.rackNo}/{s.shelfNo} ·{" "}
-                      {s.movement || "IN"}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    {s.imageData ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.imageData}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] text-muted-foreground">
+                        No photo
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {s.batchNo || "No batch"} · {s.flavour || "Unknown"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.mfgDate || "—"} → {s.expiryDate || "—"} · {s.rackNo}/{s.shelfNo} ·{" "}
+                        {s.movement || "IN"}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={s.synced ? "success" : "warning"}>

@@ -92,6 +92,7 @@ export default function ScannedHistoryPage() {
           rackNo: s.rackNo || "",
           shelfNo: s.shelfNo || "",
           movement: s.movement || "IN",
+          imageData: s.imageData || undefined,
         })),
         user: user?.name || user?.username || "Unknown",
         branch_id: user?.branch_id,
@@ -275,6 +276,7 @@ export default function ScannedHistoryPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Photo</TableHead>
                   <TableHead>Time</TableHead>
                   <TableHead>Batch</TableHead>
                   <TableHead>Flavour</TableHead>
@@ -289,19 +291,31 @@ export default function ScannedHistoryPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-muted-foreground">
+                    <TableCell colSpan={10} className="text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-muted-foreground">
+                    <TableCell colSpan={10} className="text-muted-foreground">
                       No local scans yet
                     </TableCell>
                   </TableRow>
                 ) : (
                   filtered.map((scan) => (
                     <TableRow key={scan.id ?? `${scan.timestamp}-${scan.batchNo}`}>
+                      <TableCell>
+                        {scan.imageData ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={scan.imageData}
+                            alt=""
+                            className="h-10 w-10 rounded object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {scan.timestamp}
                       </TableCell>
