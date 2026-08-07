@@ -5,6 +5,7 @@ Uses SQLite3 for user management
 
 from flask import Flask, request, jsonify, send_from_directory, session, redirect
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
 import hashlib
 import os
@@ -17,7 +18,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Response
 try:
     from dotenv import load_dotenv
@@ -27,11 +28,20 @@ except ImportError:
 
 app = Flask(__name__, static_folder='.')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'label-scanner-secret-key-2026')
-CORS(app)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE=os.getenv('SESSION_COOKIE_SAMESITE', 'Lax'),
+    SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', '').lower() in ('1', 'true', 'yes'),
+    PERMANENT_SESSION_LIFETIME=timedelta(days=int(os.getenv('SESSION_DAYS', '7'))),
+)
+# Trust X-Forwarded-* when behind Render / Next reverse proxy
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+CORS(app, supports_credentials=True)
 
 # --- Gmail OTP Config (loaded from .env) ---
 GMAIL_SENDER = os.getenv('GMAIL_SENDER', '')
 GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
+OCR_SPACE_API_KEY = os.getenv('OCR_SPACE_API_KEY', '')
 
 PERMISSION_CATALOG = [
     {'code': 'view_admin_dashboard', 'label': 'View Dashboard', 'group': 'dashboard', 'description': 'Open the main dashboard.'},
@@ -95,7 +105,10 @@ def superadmin_required(f):
     return decorated_function
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'users.db')
+DB_PATH = os.getenv('DB_PATH') or os.path.join(BASE_DIR, 'users.db')
+_db_parent = os.path.dirname(os.path.abspath(DB_PATH))
+if _db_parent:
+    os.makedirs(_db_parent, exist_ok=True)
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -1049,6 +1062,7 @@ def register():
     username = data.get('username', '').strip()
     password = data.get('password', '')
     email = data.get('email', '').strip().lower()
+    name = (data.get('name') or '').strip() or username.title()
     branch_id = data.get('branch_id')
     
     if not username or not password:
@@ -1085,7 +1099,7 @@ def register():
     cursor.execute('''
         INSERT INTO users (username, password, name, role, branch_id, email, active)
         VALUES (?, ?, ?, ?, ?, ?, 0)
-    ''', (username, password_hash, username.title(), role, branch_id, email))
+    ''', (username, password_hash, name, role, branch_id, email))
     _grant_permissions(cursor, cursor.lastrowid, DEFAULT_PERMISSION_CODES)
     
     conn.commit()
@@ -2080,8 +2094,9 @@ def proxy_ocr():
         
     file = request.files['file']
     
-    # OCR.space API Key (Securely stored on server)
-    API_KEY = 'K85403682988957'
+    API_KEY = OCR_SPACE_API_KEY or os.getenv('OCR_API_KEY', '')
+    if not API_KEY:
+        return jsonify({'error': 'OCR is not configured (set OCR_SPACE_API_KEY)'}), 503
     
     try:
         payload = {

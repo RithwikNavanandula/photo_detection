@@ -1,0 +1,27 @@
+{
+  "name": "SBC Label Scanner",
+  "short_name": "LabelScan",
+  "description": "Scan product labels and manage warehouse stock for SBC Tanzania",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f6",
+  "theme_color": "#0a67ae",
+  "icons": [
+    {
+      "src": "/sbc_logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/sbc_logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "lang": "en",
+  "scope": "/"
+}

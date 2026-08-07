@@ -1,9 +1,31 @@
 services:
   - type: web
     name: label-scanner
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/check-auth
+    disk:
+      name: label-scanner-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      - key: SESSION_COOKIE_SAMESITE
+        value: Lax
+      - key: DB_PATH
+        value: /var/data/users.db
+      - key: FLASK_ORIGIN
+        value: http://127.0.0.1:5000
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: OCR_SPACE_API_KEY
+        sync: false
+      - key: GMAIL_SENDER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false

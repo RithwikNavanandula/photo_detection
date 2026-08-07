@@ -5,6 +5,7 @@ __pycache__/
 
 # Virtual environments
 venv/
+.venv/
 .env
 
 # Database
@@ -16,3 +17,15 @@ venv/
 
 # OS
 .DS_Store
+
+# Next.js app
+web/node_modules/
+web/.next/
+web/out/
+web/.env
+web/.env.local
+web/*.tsbuildinfo
+
+# Deploy / local data
+/var/
+data/
