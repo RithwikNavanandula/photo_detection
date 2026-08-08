@@ -8,6 +8,8 @@ scan_photos/
 venv/
 .venv/
 .env
+.env.local
+.env.oracle
 
 # Database
 *.db

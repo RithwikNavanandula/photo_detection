@@ -1,0 +1,38 @@
+# Label Scanner — Oracle Cloud / any VPS
+# Usage on the VM:
+#   cp .env.oracle.example .env
+#   nano .env   # set secrets
+#   docker compose up -d --build
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: label-scanner:latest
+    container_name: label-scanner
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      DB_PATH: /var/data/users.db
+      SCAN_PHOTOS_DIR: /var/data/scan_photos
+      FLASK_ORIGIN: http://127.0.0.1:5000
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      WEB_CONCURRENCY: "1"
+      GUNICORN_TIMEOUT: "180"
+    volumes:
+      # Survives container rebuilds / reboots — keep your SQLite + photos here
+      - label_scanner_data:/var/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/check-auth"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  label_scanner_data:

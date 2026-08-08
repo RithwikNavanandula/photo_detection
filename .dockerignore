@@ -8,6 +8,7 @@ __pycache__
 .env
 .env.*
 !.env.example
+!.env.oracle.example
 server.log
 pics
 *.md

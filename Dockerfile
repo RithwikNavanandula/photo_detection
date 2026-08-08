@@ -1,5 +1,6 @@
-# SBC Label Scanner — Next.js UI + Flask API on one Render web service
+# SBC Label Scanner — Next.js UI + Flask API (Docker / Oracle Cloud / any VPS)
 # syntax=docker/dockerfile:1
+# Builds on amd64 and arm64 (Oracle Ampere A1).
 
 FROM node:20-bookworm-slim AS web-build
 WORKDIR /app/web
