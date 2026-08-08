@@ -63,6 +63,7 @@ type ActivityRow = {
   shelf: string | null;
   movement: string;
   expiry_date: string | null;
+  flavour: string | null;
   has_photo?: boolean;
 };
 
@@ -431,6 +432,7 @@ export default function AdminDashboardPage() {
                 <TableRow>
                   <TableHead>Photo</TableHead>
                   <TableHead>Time</TableHead>
+                  <TableHead>Flavor</TableHead>
                   <TableHead>Batch</TableHead>
                   <TableHead>Rack</TableHead>
                   <TableHead>Shelf</TableHead>
@@ -443,7 +445,7 @@ export default function AdminDashboardPage() {
                 {activity.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={canManage ? 8 : 7}
+                      colSpan={canManage ? 9 : 8}
                       className="text-muted-foreground"
                     >
                       No recent activity
@@ -475,6 +477,7 @@ export default function AdminDashboardPage() {
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {row.timestamp || "—"}
                       </TableCell>
+                      <TableCell>{row.flavour || "—"}</TableCell>
                       <TableCell>{row.batch || "—"}</TableCell>
                       <TableCell>{row.rack || "—"}</TableCell>
                       <TableCell>{row.shelf || "—"}</TableCell>

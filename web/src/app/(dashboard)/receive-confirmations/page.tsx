@@ -115,7 +115,7 @@ export default function TransferReceiptsPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl text-slate-900">
-              Transfer Receipts
+              Receive Confirmations
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Browse incoming branch transfers and mark them as received.
@@ -361,7 +361,7 @@ export default function TransferReceiptsPage() {
                         variant="outline"
                         onClick={() =>
                           window.open(
-                            `/transfer-receipts/${selectedId}/print`,
+                            `/receive-confirmations/${selectedId}/print`,
                             "_blank",
                             "noopener,noreferrer"
                           )

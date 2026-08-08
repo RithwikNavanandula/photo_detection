@@ -1631,7 +1631,7 @@ def admin_dashboard():
     _ensure_scan_photo_column(cursor)
     activity_query = f'''
         SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf,
-               movement, expiry_date, photo_path
+               movement, expiry_date, flavour, photo_path
         FROM scans{branch_where}
         {order_clause}
         LIMIT 15
@@ -2756,11 +2756,13 @@ def manage_truck(truck_id):
 @app.route('/api/transfer/requests', methods=['GET'])
 @login_required
 def get_transfer_requests():
-    """Get all transfer requests"""
+    """Get all transfer requests (branch-filtered for non-superadmin users)"""
     if not _can_access_permission('manage_transfers'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
-    # Filters
+    
     status = request.args.get('status')
+    role = session.get('role')
+    current_branch_id = session.get('branch_id')
     
     query = '''
         SELECT tr.id, tr.quantity, tr.requested_by, tr.requested_by_name,
@@ -2781,18 +2783,19 @@ def get_transfer_requests():
         LEFT JOIN production_stock ps ON ps.transfer_request_id = tr.id
     '''
     params = []
-    
     where_clauses = []
+    
+    # Non-superadmin users only see transfers from their branch
+    if role != 'superadmin':
+        where_clauses.append('(tr.source_branch_id = ? OR tr.destination_branch_id = ? OR pb.id = ?)')
+        params.extend([current_branch_id, current_branch_id, current_branch_id])
+    
     if status:
         if status == 'pending':
             where_clauses.append("tr.status IN ('submitted', 'pending')")
         else:
             where_clauses.append('tr.status = ?')
             params.append(status)
-        
-    # If user is not admin, distinct logic? 
-    # Plan says "when any other person opens the report should be able to show who requested it".
-    # So assuming all users can see reports for transparency.
     
     if where_clauses:
         query += ' WHERE ' + ' AND '.join(where_clauses)

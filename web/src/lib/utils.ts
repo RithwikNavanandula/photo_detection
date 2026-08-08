@@ -13,8 +13,8 @@ export function postRedirectTarget(user: {
   if (user.role === "superadmin" || perms.has("view_admin_dashboard")) {
     return "/admin";
   }
-  if (perms.has("receive_transfer")) return "/transfer-receipts";
+  if (perms.has("receive_transfer")) return "/receive-confirmations";
   if (perms.has("create_transfer")) return "/transfer";
-  if (perms.has("manage_transfers")) return "/transfer-reports";
+  if (perms.has("manage_transfers")) return "/all-transfers";
   return "/app";
 }
