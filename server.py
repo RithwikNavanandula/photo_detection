@@ -8,6 +8,45 @@ from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 import libsql_experimental as libsql
 
+import hashlib
+import os
+import csv
+import io
+import base64
+import uuid
+import requests
+import random
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from functools import wraps
+from datetime import datetime, timedelta
+from flask import Response
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed; env vars must be set in the system/WSGI config
+
+# Turso Hrana streams expire after ~10s idle / can drop mid-batch.
+_HRANA_STREAM_MARKERS = (
+    'stream not found',
+    'stream has expired',
+    'stream expired',
+    'hrana_closed',
+    'hrana:',
+)
+
+def _is_hrana_stream_error(exc):
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _HRANA_STREAM_MARKERS)
+
+def _turso_connect():
+    turso_url = os.getenv('TURSO_DB_URL', 'libsql://scanner-rishi-n.aws-ap-south-1.turso.io')
+    turso_token = os.getenv('TURSO_AUTH_TOKEN', 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODYyMTE3NzAsImlkIjoiMDE5ZmUyODQtMWMwMS03ZGU3LThhY2ItOWE1NTUwZmRjZTljIiwia2lkIjoiUkNaOVdPR2hGbXNpNHhtMmd2NF9BM1BHUVhWZk5oN2RrV1h1RXF0MDJTcyIsInJpZCI6IjVmOGI2NTE4LTQzZjEtNGU0Ni1hYzRhLTgzNjhmZDM3YWVjOCJ9.TZ-8H3py5erYBV-lsnXIupKtU_vd_S05AkUdT80FBjLwJRiMvy4gc5a8kSEjkzR0FKxEJiAvSDLsV-fNmZljCg')
+    return libsql.connect(turso_url, auth_token=turso_token)
+
 class DictRow:
     def __init__(self, tuple_row, description):
         self._tuple = tuple_row
@@ -31,8 +70,9 @@ class DictRow:
         return len(self._tuple)
 
 class CursorWrapper:
-    def __init__(self, cursor):
+    def __init__(self, cursor, connection=None):
         self._cursor = cursor
+        self._connection = connection
     def __getattr__(self, attr):
         return getattr(self._cursor, attr)
     def fetchone(self):
@@ -52,39 +92,51 @@ class CursorWrapper:
     def execute(self, sql, parameters=()):
         if isinstance(parameters, list):
             parameters = tuple(parameters)
-        return CursorWrapper(self._cursor.execute(sql, parameters))
+        try:
+            result = self._cursor.execute(sql, parameters)
+            return CursorWrapper(result, self._connection)
+        except ValueError as e:
+            # Drop the dead stream so the next attempt uses a fresh connection.
+            # Do not retry here — mid-transaction retries can orphan uncommitted rows.
+            if self._connection and _is_hrana_stream_error(e):
+                self._connection.reconnect()
+            raise
 
 class ConnectionWrapper:
-    def __init__(self, conn):
-        self._conn = conn
+    def __init__(self, conn=None):
+        self._conn = conn if conn is not None else _turso_connect()
+    def reconnect(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        self._conn = _turso_connect()
     def __getattr__(self, attr):
         return getattr(self._conn, attr)
     def cursor(self):
-        return CursorWrapper(self._conn.cursor())
+        return CursorWrapper(self._conn.cursor(), self)
     def execute(self, sql, parameters=()):
         if isinstance(parameters, list):
             parameters = tuple(parameters)
-        return CursorWrapper(self._conn.execute(sql, parameters))
-import hashlib
-import os
-import csv
-import io
-import base64
-import uuid
-import requests
-import random
-import time
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from functools import wraps
-from datetime import datetime, timedelta
-from flask import Response
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # dotenv not installed; env vars must be set in the system/WSGI config
+        try:
+            return CursorWrapper(self._conn.execute(sql, parameters), self)
+        except ValueError as e:
+            if _is_hrana_stream_error(e):
+                self.reconnect()
+                return CursorWrapper(self._conn.execute(sql, parameters), self)
+            raise
+    def commit(self):
+        try:
+            return self._conn.commit()
+        except ValueError as e:
+            if _is_hrana_stream_error(e):
+                self.reconnect()
+            raise
+    def close(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
 
 app = Flask(__name__, static_folder='.')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'label-scanner-secret-key-2026')
@@ -178,10 +230,7 @@ os.makedirs(SCAN_PHOTOS_DIR, exist_ok=True)
 MAX_SCAN_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB
 
 def get_db():
-    turso_url = os.getenv('TURSO_DB_URL', 'libsql://scanner-rishi-n.aws-ap-south-1.turso.io')
-    turso_token = os.getenv('TURSO_AUTH_TOKEN', 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODYyMTE3NzAsImlkIjoiMDE5ZmUyODQtMWMwMS03ZGU3LThhY2ItOWE1NTUwZmRjZTljIiwia2lkIjoiUkNaOVdPR2hGbXNpNHhtMmd2NF9BM1BHUVhWZk5oN2RrV1h1RXF0MDJTcyIsInJpZCI6IjVmOGI2NTE4LTQzZjEtNGU0Ni1hYzRhLTgzNjhmZDM3YWVjOCJ9.TZ-8H3py5erYBV-lsnXIupKtU_vd_S05AkUdT80FBjLwJRiMvy4gc5a8kSEjkzR0FKxEJiAvSDLsV-fNmZljCg')
-    conn = libsql.connect(turso_url, auth_token=turso_token)
-    return ConnectionWrapper(conn)
+    return ConnectionWrapper(_turso_connect())
 
 def _ensure_permission_tables(cursor):
     cursor.execute('''
@@ -500,8 +549,13 @@ def _ensure_inventory_tables(cursor):
     ''')
     _ensure_scan_photo_column(cursor)
 
-def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True):
-    """Shared scan sync implementation for both user and admin endpoints."""
+def _sync_scans_to_db(conn, scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True):
+    """Shared scan sync implementation for both user and admin endpoints.
+
+    Commits after each scan so Turso Hrana streams stay active and partial
+    progress survives a mid-batch stream drop. Duplicate checks make retries safe.
+    """
+    cursor = conn.cursor()
     _ensure_scan_photo_column(cursor)
 
     if replace:
@@ -510,9 +564,12 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
             _delete_scan_photo(row['photo_path'])
         cursor.execute('DELETE FROM scans')
         cursor.execute('DELETE FROM stock')
+        conn.commit()
 
     synced = 0
     for scan in scans:
+        # Fresh cursor each iteration in case a prior reconnect replaced the stream.
+        cursor = conn.cursor()
         stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
         movement = scan.get('movement', 'IN')
         timestamp = scan.get('timestamp', '')
@@ -544,9 +601,12 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
                         )
                     }
 
-        photo_path = _save_scan_photo(
-            scan.get('imageData') or scan.get('photo') or scan.get('image')
-        )
+        photo_path = scan.get('processed_photo_path')
+        if photo_path is None:
+            # Back-compat if caller did not pre-process images.
+            photo_path = _save_scan_photo(
+                scan.get('imageData') or scan.get('photo') or scan.get('image')
+            )
 
         cursor.execute('''
             INSERT INTO scans (
@@ -567,9 +627,51 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
             branch_id,
             photo_path
         ))
+        conn.commit()
         synced += 1
 
     return {'success': True, 'synced': synced}
+
+def _prepare_scan_photos(scans):
+    """Decode/save photos before any DB work so Hrana streams are not idled."""
+    for scan in scans:
+        if scan.get('processed_photo_path') is not None:
+            continue
+        scan['processed_photo_path'] = _save_scan_photo(
+            scan.get('imageData') or scan.get('photo') or scan.get('image')
+        )
+
+def _sync_scans_with_retry(scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True, attempts=3):
+    """Run scan sync with fresh Turso connections on Hrana stream failures."""
+    last_error = None
+    for attempt in range(attempts):
+        conn = get_db()
+        try:
+            cursor = conn.cursor()
+            _ensure_inventory_tables(cursor)
+            conn.commit()
+            result = _sync_scans_to_db(
+                conn,
+                scans,
+                user=user,
+                branch_id=branch_id,
+                replace=replace,
+                validate_out=validate_out,
+            )
+            return result
+        except ValueError as e:
+            last_error = e
+            if _is_hrana_stream_error(e) and attempt < attempts - 1:
+                print(f'[Turso] stream lost during sync (attempt {attempt + 1}/{attempts}): {e}')
+                time.sleep(0.25 * (attempt + 1))
+                continue
+            raise
+        finally:
+            conn.close()
+    if last_error:
+        raise last_error
+    return {'success': False, 'error': 'Sync failed'}
+
 
 # --- SQLite-backed OTP helpers (survive server restarts) ---
 
@@ -2009,25 +2111,19 @@ def sync_user_scans():
     if not scans:
         return jsonify({'success': False, 'error': 'No scans provided'}), 400
 
-    conn = get_db()
-    cursor = conn.cursor()
-    _ensure_inventory_tables(cursor)
+    # Process images before opening DB connection to prevent stream timeouts
+    _prepare_scan_photos(scans)
 
-    result = _sync_scans_to_db(
-        cursor,
+    result = _sync_scans_with_retry(
         scans,
         user=user,
         branch_id=branch_id,
         replace=False,
-        validate_out=True
+        validate_out=True,
     )
     if not result['success']:
-        conn.close()
         return jsonify(result), 400
 
-    conn.commit()
-    conn.close()
-    
     return jsonify(result)
 
 @app.route('/api/admin/sync', methods=['POST'])
@@ -2036,23 +2132,18 @@ def sync_scans():
     """Sync scan data from frontend IndexedDB"""
     data = request.get_json()
     scans = data.get('scans', [])
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    _ensure_inventory_tables(cursor)
 
-    result = _sync_scans_to_db(
-        cursor,
+    # Process images before opening DB connection to prevent stream timeouts
+    _prepare_scan_photos(scans)
+
+    result = _sync_scans_with_retry(
         scans,
         user=data.get('user', 'Unknown'),
         branch_id=None,
         replace=True,
-        validate_out=False
+        validate_out=False,
     )
 
-    conn.commit()
-    conn.close()
-    
     return jsonify(result)
 
 @app.route('/api/admin/export', methods=['GET'])
