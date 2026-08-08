@@ -17,12 +17,18 @@ services:
         value: "1"
       - key: SESSION_COOKIE_SAMESITE
         value: Lax
-      - key: DB_PATH
-        value: /var/data/users.db
+      - key: SCAN_PHOTOS_DIR
+        value: /var/data/scan_photos
       - key: FLASK_ORIGIN
         value: http://127.0.0.1:5000
       - key: WEB_CONCURRENCY
         value: "2"
+      - key: GUNICORN_TIMEOUT
+        value: "180"
+      - key: TURSO_DB_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: OCR_SPACE_API_KEY
         sync: false
       - key: GMAIL_SENDER

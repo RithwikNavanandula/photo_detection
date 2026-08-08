@@ -265,41 +265,53 @@ export default function ScannerPage() {
       toast.message("All local scans already synced");
       return;
     }
-    try {
-      const result = await apiJson.post<{
-        success: boolean;
-        synced?: number;
-        error?: string;
-      }>("/api/sync", {
-        scans: pending.map((s) => ({
-          timestamp: s.timestamp,
-          batchNo: s.batchNo || "",
-          mfgDate: s.mfgDate || "",
-          expiryDate: s.expiryDate || "",
-          flavour: s.flavour || "",
-          rackNo: s.rackNo || "",
-          shelfNo: s.shelfNo || "",
-          movement: s.movement || "IN",
-          imageData: s.imageData || undefined,
-        })),
-        user: user?.name || "Unknown",
-        branch_id: user?.branch_id,
-      });
-      if (!result.success) {
-        toast.error(result.error || "Sync failed");
-        return;
-      }
-      for (const s of pending) {
+    let done = 0;
+    let failed = 0;
+    // One scan per request — keeps Turso streams short and avoids proxy hang-ups
+    for (const s of pending) {
+      try {
+        const result = await apiJson.post<{
+          success: boolean;
+          synced?: number;
+          error?: string;
+        }>("/api/sync", {
+          scans: [
+            {
+              timestamp: s.timestamp,
+              batchNo: s.batchNo || "",
+              mfgDate: s.mfgDate || "",
+              expiryDate: s.expiryDate || "",
+              flavour: s.flavour || "",
+              rackNo: s.rackNo || "",
+              shelfNo: s.shelfNo || "",
+              movement: s.movement || "IN",
+              imageData: s.imageData || undefined,
+            },
+          ],
+          user: user?.name || "Unknown",
+          branch_id: user?.branch_id,
+        });
+        if (!result.success) {
+          failed += 1;
+          continue;
+        }
         if (s.id != null) await Storage.markSynced(s.id);
+        done += 1;
+      } catch {
+        failed += 1;
       }
-      toast.success(`Synced ${result.synced ?? pending.length} scans`);
+    }
+    if (done && !failed) {
+      toast.success(`Synced ${done} scans`);
       if (window.confirm("Clear local history after successful sync?")) {
         await Storage.clearAll();
       }
-      await reloadHistory();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sync failed");
+    } else if (done) {
+      toast.warning(`${done} synced, ${failed} failed — retry remaining`);
+    } else {
+      toast.error(failed ? "Sync failed" : "Nothing synced");
     }
+    await reloadHistory();
   }
 
   function downloadCsv() {

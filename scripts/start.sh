@@ -6,27 +6,25 @@ mkdir -p "$DATA_DIR" 2>/dev/null || {
   DATA_DIR="/app/data"
   mkdir -p "$DATA_DIR"
 }
-export DB_PATH="${DB_PATH:-$DATA_DIR/users.db}"
+export SCAN_PHOTOS_DIR="${SCAN_PHOTOS_DIR:-$DATA_DIR/scan_photos}"
 export FLASK_ORIGIN="${FLASK_ORIGIN:-http://127.0.0.1:5000}"
 export PORT="${PORT:-3000}"
 export HOSTNAME="${HOSTNAME:-0.0.0.0}"
 export SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-1}"
 
-# Initialize database if it doesn't exist
-if [ ! -f "$DB_PATH" ]; then
-  echo "Initializing database at $DB_PATH..."
-  cd /app/api
-  python3 setup_db.py
-  echo "Database initialized"
-fi
+mkdir -p "$SCAN_PHOTOS_DIR"
 
-echo "Starting Flask API on 127.0.0.1:5000 (DB_PATH=$DB_PATH)"
+# App rows live in Turso. Persistent disk only stores scan photos.
+echo "Turso DB for app data; photos dir=$SCAN_PHOTOS_DIR"
+
+echo "Starting Flask API on 127.0.0.1:5000"
 cd /app/api
 gunicorn server:app \
   --bind 127.0.0.1:5000 \
   --workers "${WEB_CONCURRENCY:-2}" \
   --threads 4 \
-  --timeout 120 \
+  --timeout "${GUNICORN_TIMEOUT:-180}" \
+  --graceful-timeout 30 \
   --access-logfile - \
   --error-logfile - &
 
