@@ -25,10 +25,6 @@ RUN pip install --no-cache-dir -r /app/api/requirements.txt
 
 # Flask API (exclude local venvs / dbs via .dockerignore)
 COPY server.py setup_db.py requirements.txt /app/api/
-COPY css /app/api/css
-COPY js /app/api/js
-COPY templates /app/api/templates
-COPY manifest.json sw.js /app/api/
 
 # Next standalone
 COPY --from=web-build /app/web/public /app/web/public

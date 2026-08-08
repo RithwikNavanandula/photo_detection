@@ -12,6 +12,14 @@ export PORT="${PORT:-3000}"
 export HOSTNAME="${HOSTNAME:-0.0.0.0}"
 export SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-1}"
 
+# Initialize database if it doesn't exist
+if [ ! -f "$DB_PATH" ]; then
+  echo "Initializing database at $DB_PATH..."
+  cd /app/api
+  python3 setup_db.py
+  echo "Database initialized"
+fi
+
 echo "Starting Flask API on 127.0.0.1:5000 (DB_PATH=$DB_PATH)"
 cd /app/api
 gunicorn server:app \

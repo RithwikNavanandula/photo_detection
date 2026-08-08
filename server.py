@@ -3,7 +3,7 @@ Flask Backend for Label Scanner Authentication
 Uses SQLite3 for user management
 """
 
-from flask import Flask, request, jsonify, send_from_directory, session, redirect
+from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
@@ -235,13 +235,6 @@ def _can_access_admin_endpoint(endpoint_name):
     if not required:
         return session.get('role') == 'superadmin'
     return _can_access_permission(required)
-
-def _protected_page(filename, permission_code=None, redirect_to='/'):
-    if 'user_id' not in session:
-        return redirect(redirect_to)
-    if session.get('role') != 'superadmin' and permission_code and not _can_access_permission(permission_code):
-        return redirect(redirect_to)
-    return send_from_directory('.', filename)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -2279,59 +2272,6 @@ def get_scan_photo(scan_id):
         max_age=86400,
     )
 
-@app.route('/admin')
-def serve_admin():
-    return _protected_page('admin.html', 'view_admin_dashboard')
-
-# Serve static files
-@app.route('/')
-def serve_index():
-    return send_from_directory('.', 'login.html')
-
-@app.route('/app')
-def serve_app():
-    return _protected_page('index.html', 'view_scanner')
-
-@app.route('/analytics')
-def serve_analytics():
-    return _protected_page('analytics.html', 'view_analytics')
-
-@app.route('/branches')
-def serve_branches():
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin':
-        return redirect('/app')
-    return send_from_directory('.', 'branches.html')
-
-@app.route('/scanned')
-def serve_scanned():
-    return _protected_page('scanned.html', 'view_scanner')
-
-@app.route('/users')
-def serve_users():
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin':
-        return redirect('/app')
-    return send_from_directory('.', 'users.html')
-
-@app.route('/authorizations')
-def serve_authorizations():
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin':
-        return redirect('/app')
-    return send_from_directory('.', 'authorizations.html')
-
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('.', path)
-
-@app.route('/pivot')
-def serve_pivot():
-    return _protected_page('pivot.html', 'view_pivot')
-
 @app.route('/api/admin/pivot', methods=['GET'])
 @admin_required
 def get_pivot_data():
@@ -2377,46 +2317,6 @@ def get_pivot_data():
     return jsonify({'success': True, 'scans': scans})
 
 # --- Transfer Request API ---
-
-@app.route('/transfer')
-def serve_transfer():
-    return _protected_page('transfer.html', 'create_transfer')
-
-@app.route('/transfer-reports')
-def serve_transfer_reports():
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin' and not _can_access_permission('manage_transfers'):
-        return redirect('/app')
-    return send_from_directory('.', 'transfer-reports.html')
-
-@app.route('/transfer-receipts')
-def serve_transfer_receipts():
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin' and not _can_access_permission('receive_transfer'):
-        return redirect('/app')
-    return send_from_directory('.', 'transfer-receipts.html')
-
-@app.route('/transfer-receipts/<int:request_id>/print')
-def serve_transfer_receipt_print(request_id):
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin' and not _can_access_permission('receive_transfer'):
-        return redirect('/app')
-    return send_from_directory('.', 'transfer-receipt-print.html')
-
-@app.route('/pending-requests')
-def serve_pending_requests():
-    if 'user_id' not in session:
-        return redirect('/')
-    if session.get('role') != 'superadmin' and not _can_access_permission('manage_transfers'):
-        return redirect('/app')
-    return send_from_directory('.', 'pending-requests.html')
-
-@app.route('/trucks')
-def serve_trucks():
-    return _protected_page('trucks.html', 'create_transfer')
 
 @app.route('/api/transfer/flavors', methods=['GET'])
 @login_required
@@ -3089,7 +2989,6 @@ def update_transfer_status():
 
 if __name__ == '__main__':
     init_db()
-    print('\n🚀 Label Scanner Server running at http://localhost:5000')
-    print('   Login page: http://localhost:5000/')
-    print('   Main app:   http://localhost:5000/app\n')
+    print('\nLabel Scanner API running at http://localhost:5000')
+    print('  UI: cd web && npm run dev (proxies /api to this server)\n')
     app.run(host='0.0.0.0', port=5000, debug=True)

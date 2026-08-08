@@ -12,7 +12,7 @@ import sqlite3
 import hashlib
 import os
 
-DB_PATH = 'users.db'
+DB_PATH = os.getenv('DB_PATH', 'users.db')
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
