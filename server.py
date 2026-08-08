@@ -1,12 +1,12 @@
 """
 Flask Backend for Label Scanner Authentication
-Uses Turso (libSQL) for persistent cloud storage
+Uses local SQLite for user/inventory data
 """
 
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
-import libsql_experimental as libsql
+import sqlite3
 import hashlib
 import os
 import csv
@@ -28,90 +28,6 @@ try:
 except ImportError:
     pass  # dotenv not installed; env vars must be set in the system/WSGI config
 
-# Turso Hrana streams expire after ~10s idle / can drop mid-batch.
-_HRANA_STREAM_MARKERS = (
-    'stream not found',
-    'stream has expired',
-    'stream expired',
-    'hrana_closed',
-    'hrana:',
-)
-
-def _is_hrana_stream_error(exc):
-    msg = str(exc).lower()
-    return any(marker in msg for marker in _HRANA_STREAM_MARKERS)
-
-def _turso_connect():
-    turso_url = os.getenv('TURSO_DB_URL', 'libsql://scanner-rishi-n.aws-ap-south-1.turso.io')
-    turso_token = os.getenv('TURSO_AUTH_TOKEN', 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODYyMTE3NzAsImlkIjoiMDE5ZmUyODQtMWMwMS03ZGU3LThhY2ItOWE1NTUwZmRjZTljIiwia2lkIjoiUkNaOVdPR2hGbXNpNHhtMmd2NF9BM1BHUVhWZk5oN2RrV1h1RXF0MDJTcyIsInJpZCI6IjVmOGI2NTE4LTQzZjEtNGU0Ni1hYzRhLTgzNjhmZDM3YWVjOCJ9.TZ-8H3py5erYBV-lsnXIupKtU_vd_S05AkUdT80FBjLwJRiMvy4gc5a8kSEjkzR0FKxEJiAvSDLsV-fNmZljCg')
-    return libsql.connect(turso_url, auth_token=turso_token)
-
-class DictRow:
-    def __init__(self, tuple_row, description):
-        self._tuple = tuple_row
-        self._dict = {col[0]: tuple_row[idx] for idx, col in enumerate(description)}
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self._tuple[key]
-        return self._dict[key]
-    def keys(self):
-        return self._dict.keys()
-    def get(self, key, default=None):
-        return self._dict.get(key, default)
-    def __getattr__(self, name):
-        try:
-            return self._dict[name]
-        except KeyError:
-            raise AttributeError(name)
-    def __iter__(self):
-        return iter(self._tuple)
-    def __len__(self):
-        return len(self._tuple)
-
-class CursorWrapper:
-    def __init__(self, cursor):
-        self._cursor = cursor
-    def __getattr__(self, attr):
-        return getattr(self._cursor, attr)
-    def fetchone(self):
-        row = self._cursor.fetchone()
-        if row is None:
-            return None
-        return DictRow(row, self._cursor.description)
-    def fetchall(self):
-        rows = self._cursor.fetchall()
-        if not rows:
-            return []
-        desc = self._cursor.description
-        return [DictRow(row, desc) for row in rows]
-    def fetchmany(self, size=None):
-        rows = self._cursor.fetchmany(size) if size else self._cursor.fetchmany()
-        if not rows:
-            return []
-        desc = self._cursor.description
-        return [DictRow(row, desc) for row in rows]
-    def execute(self, sql, parameters=()):
-        if isinstance(parameters, list):
-            parameters = tuple(parameters)
-        return CursorWrapper(self._cursor.execute(sql, parameters))
-
-class ConnectionWrapper:
-    def __init__(self, conn=None):
-        self._conn = conn if conn is not None else _turso_connect()
-    def __getattr__(self, attr):
-        return getattr(self._conn, attr)
-    def cursor(self):
-        return CursorWrapper(self._conn.cursor())
-    def execute(self, sql, parameters=()):
-        if isinstance(parameters, list):
-            parameters = tuple(parameters)
-        return CursorWrapper(self._conn.execute(sql, parameters))
-    def close(self):
-        try:
-            self._conn.close()
-        except Exception:
-            pass
-
 app = Flask(__name__, static_folder='.')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'label-scanner-secret-key-2026')
 app.config.update(
@@ -119,10 +35,9 @@ app.config.update(
     SESSION_COOKIE_SAMESITE=os.getenv('SESSION_COOKIE_SAMESITE', 'Lax'),
     SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', '').lower() in ('1', 'true', 'yes'),
     PERMANENT_SESSION_LIFETIME=timedelta(days=int(os.getenv('SESSION_DAYS', '7'))),
-    # Large sync payloads include base64 photos
     MAX_CONTENT_LENGTH=int(os.getenv('MAX_CONTENT_LENGTH', str(64 * 1024 * 1024))),
 )
-# Trust X-Forwarded-* when behind Render / Next reverse proxy
+# Trust X-Forwarded-* when behind a reverse proxy
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 CORS(app, supports_credentials=True)
 
@@ -198,7 +113,7 @@ _db_parent = os.path.dirname(os.path.abspath(DB_PATH))
 if _db_parent:
     os.makedirs(_db_parent, exist_ok=True)
 
-# Scan photos live next to the DB so Render's persistent disk keeps them
+# Scan photos live next to the DB so a persistent disk keeps them across deploys
 SCAN_PHOTOS_DIR = os.getenv('SCAN_PHOTOS_DIR') or os.path.join(
     _db_parent or BASE_DIR, 'scan_photos'
 )
@@ -206,7 +121,13 @@ os.makedirs(SCAN_PHOTOS_DIR, exist_ok=True)
 MAX_SCAN_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB
 
 def get_db():
-    return ConnectionWrapper(_turso_connect())
+    """Open local SQLite with WAL for better concurrent reads."""
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute('PRAGMA journal_mode = WAL')
+    conn.execute('PRAGMA busy_timeout = 30000')
+    return conn
 
 def _ensure_permission_tables(cursor):
     cursor.execute('''
@@ -526,145 +447,86 @@ def _ensure_inventory_tables(cursor):
     _ensure_scan_photo_column(cursor)
 
 def _prepare_scan_photos(scans):
-    """Decode/save photos before any DB work so Hrana streams are not idled."""
+    """Decode/save photos to disk before DB inserts (keeps payloads out of SQL)."""
     for scan in scans:
         if scan.get('processed_photo_path') is not None:
             continue
         scan['processed_photo_path'] = _save_scan_photo(
             scan.get('imageData') or scan.get('photo') or scan.get('image')
         )
-        # Drop large base64 from memory after writing to disk
         scan.pop('imageData', None)
         scan.pop('photo', None)
         scan.pop('image', None)
 
-def _insert_one_scan(cursor, scan, *, user, branch_id, validate_out):
-    """Insert a single scan. Returns ('inserted'|'skipped', None) or ('error', payload)."""
-    stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
-    movement = scan.get('movement', 'IN')
-    timestamp = scan.get('timestamp', '')
-
-    cursor.execute('''
-        SELECT id FROM scans
-        WHERE stock_id = ? AND movement = ? AND timestamp = ?
-    ''', (stock_id, movement, timestamp))
-    if cursor.fetchone():
-        return 'skipped', None
-
-    if validate_out and movement == 'OUT':
-        cursor.execute('''
-            SELECT movement FROM scans
-            WHERE stock_id = ?
-        ''', (stock_id,))
-        stock_rows = cursor.fetchall()
-        in_count = sum(1 for r in stock_rows if r['movement'] == 'IN')
-        out_count = sum(1 for r in stock_rows if r['movement'] == 'OUT')
-        if in_count <= out_count:
-            return 'error', {
-                'success': False,
-                'error': (
-                    f"Stock Error: No available stock found for Batch {scan.get('batchNo')} "
-                    f"({scan.get('flavour')}) at this location."
-                )
-            }
-
-    photo_path = scan.get('processed_photo_path')
-    if photo_path is None:
-        photo_path = _save_scan_photo(
-            scan.get('imageData') or scan.get('photo') or scan.get('image')
-        )
-
-    cursor.execute('''
-        INSERT INTO scans (
-            stock_id, timestamp, batch_no, mfg_date, expiry_date,
-            flavour, rack_no, shelf_no, movement, synced_by, branch_id, photo_path
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        stock_id,
-        timestamp,
-        scan.get('batchNo', ''),
-        scan.get('mfgDate', ''),
-        scan.get('expiryDate', ''),
-        scan.get('flavour', ''),
-        scan.get('rackNo', ''),
-        scan.get('shelfNo', ''),
-        movement,
-        user,
-        branch_id,
-        photo_path
-    ))
-    return 'inserted', None
-
-def _with_fresh_db(fn, *, attempts=3, label='query'):
-    """Open a fresh Turso connection, run fn(conn), retry on Hrana stream loss."""
-    last_error = None
-    for attempt in range(attempts):
-        conn = get_db()
-        try:
-            return fn(conn)
-        except ValueError as e:
-            last_error = e
-            if _is_hrana_stream_error(e) and attempt < attempts - 1:
-                print(f'[Turso] stream lost during {label} (attempt {attempt + 1}/{attempts}): {e}')
-                time.sleep(0.2 * (attempt + 1))
-                continue
-            raise
-        finally:
-            conn.close()
-    if last_error:
-        raise last_error
-    return None
-
-def _sync_scans_with_retry(scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True, attempts=3):
-    """Sync scans using one short-lived Turso connection per scan.
-
-    Holding one Hrana stream across a full batch is what caused
-    `stream not found` / worker ECONNRESET under load.
-    """
-    def setup(conn):
-        cursor = conn.cursor()
-        _ensure_inventory_tables(cursor)
-        conn.commit()
-
-    _with_fresh_db(setup, attempts=attempts, label='inventory setup')
+def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True):
+    """Shared scan sync for user and admin endpoints."""
+    _ensure_scan_photo_column(cursor)
 
     if replace:
-        def wipe(conn):
-            cursor = conn.cursor()
-            cursor.execute('SELECT photo_path FROM scans WHERE photo_path IS NOT NULL')
-            for row in cursor.fetchall():
-                _delete_scan_photo(row['photo_path'])
-            cursor.execute('DELETE FROM scans')
-            cursor.execute('DELETE FROM stock')
-            conn.commit()
-
-        _with_fresh_db(wipe, attempts=attempts, label='replace wipe')
+        cursor.execute('SELECT photo_path FROM scans WHERE photo_path IS NOT NULL')
+        for row in cursor.fetchall():
+            _delete_scan_photo(row['photo_path'])
+        cursor.execute('DELETE FROM scans')
+        cursor.execute('DELETE FROM stock')
 
     synced = 0
-    for index, scan in enumerate(scans):
-        def do_one(conn, scan=scan):
-            cursor = conn.cursor()
-            status, err = _insert_one_scan(
-                cursor,
-                scan,
-                user=user,
-                branch_id=branch_id,
-                validate_out=validate_out and not replace,
-            )
-            if status == 'error':
-                return err
-            conn.commit()
-            return {'success': True, 'status': status}
+    for scan in scans:
+        stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
+        movement = scan.get('movement', 'IN')
+        timestamp = scan.get('timestamp', '')
 
-        result = _with_fresh_db(
-            do_one,
-            attempts=attempts,
-            label=f'scan {index + 1}/{len(scans)}',
-        )
-        if not result or not result.get('success'):
-            return result or {'success': False, 'error': 'Sync failed'}
-        if result.get('status') == 'inserted':
-            synced += 1
+        if not replace:
+            cursor.execute('''
+                SELECT id FROM scans
+                WHERE stock_id = ? AND movement = ? AND timestamp = ?
+            ''', (stock_id, movement, timestamp))
+            if cursor.fetchone():
+                continue
+
+            if validate_out and movement == 'OUT':
+                cursor.execute('''
+                    SELECT movement FROM scans
+                    WHERE stock_id = ?
+                ''', (stock_id,))
+                stock_rows = cursor.fetchall()
+                in_count = sum(1 for r in stock_rows if r['movement'] == 'IN')
+                out_count = sum(1 for r in stock_rows if r['movement'] == 'OUT')
+
+                if in_count <= out_count:
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Stock Error: No available stock found for Batch {scan.get('batchNo')} "
+                            f"({scan.get('flavour')}) at this location."
+                        )
+                    }
+
+        photo_path = scan.get('processed_photo_path')
+        if photo_path is None:
+            photo_path = _save_scan_photo(
+                scan.get('imageData') or scan.get('photo') or scan.get('image')
+            )
+
+        cursor.execute('''
+            INSERT INTO scans (
+                stock_id, timestamp, batch_no, mfg_date, expiry_date,
+                flavour, rack_no, shelf_no, movement, synced_by, branch_id, photo_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            stock_id,
+            timestamp,
+            scan.get('batchNo', ''),
+            scan.get('mfgDate', ''),
+            scan.get('expiryDate', ''),
+            scan.get('flavour', ''),
+            scan.get('rackNo', ''),
+            scan.get('shelfNo', ''),
+            movement,
+            user,
+            branch_id,
+            photo_path
+        ))
+        synced += 1
 
     return {'success': True, 'synced': synced}
 
@@ -2107,10 +1969,14 @@ def sync_user_scans():
     if not scans:
         return jsonify({'success': False, 'error': 'No scans provided'}), 400
 
-    # Process images before opening DB connection to prevent stream timeouts
     _prepare_scan_photos(scans)
 
-    result = _sync_scans_with_retry(
+    conn = get_db()
+    cursor = conn.cursor()
+    _ensure_inventory_tables(cursor)
+
+    result = _sync_scans_to_db(
+        cursor,
         scans,
         user=user,
         branch_id=branch_id,
@@ -2118,7 +1984,11 @@ def sync_user_scans():
         validate_out=True,
     )
     if not result['success']:
+        conn.close()
         return jsonify(result), 400
+
+    conn.commit()
+    conn.close()
 
     return jsonify(result)
 
@@ -2129,16 +1999,23 @@ def sync_scans():
     data = request.get_json()
     scans = data.get('scans', [])
 
-    # Process images before opening DB connection to prevent stream timeouts
     _prepare_scan_photos(scans)
 
-    result = _sync_scans_with_retry(
+    conn = get_db()
+    cursor = conn.cursor()
+    _ensure_inventory_tables(cursor)
+
+    result = _sync_scans_to_db(
+        cursor,
         scans,
         user=data.get('user', 'Unknown'),
         branch_id=None,
         replace=True,
         validate_out=False,
     )
+
+    conn.commit()
+    conn.close()
 
     return jsonify(result)
 
