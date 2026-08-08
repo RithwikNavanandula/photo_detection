@@ -311,8 +311,6 @@ export default function ScannedHistoryPage() {
                           {scan.movement || "IN"}
                         </Badge>
                       </TableCell>
-                        </Badge>
-                      </TableCell>
                       <TableCell className="space-x-1 text-right">
                           <Button
                             variant="outline"
