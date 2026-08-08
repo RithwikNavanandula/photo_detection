@@ -31,7 +31,6 @@ export default function ScannedHistoryPage() {
   const { user, can, isSuperadmin } = useAuth();
   const [scans, setScans] = useState<LocalScan[]>([]);
   const [search, setSearch] = useState("");
-  const [syncFilter, setSyncFilter] = useState("all");
   const [movementFilter, setMovementFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -51,15 +50,12 @@ export default function ScannedHistoryPage() {
   }, []);
 
   const stats = useMemo(() => {
-    const synced = scans.filter((s) => s.synced).length;
     const today = new Date().toLocaleDateString("en-IN");
     const todayCount = scans.filter((s) =>
       (s.timestamp || "").includes(today.split(",")[0] || today)
     ).length;
     return {
       total: scans.length,
-      synced,
-      unsynced: scans.length - synced,
       today: todayCount,
     };
   }, [scans]);
@@ -67,8 +63,6 @@ export default function ScannedHistoryPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return scans.filter((s) => {
-      if (syncFilter === "synced" && !s.synced) return false;
-      if (syncFilter === "unsynced" && s.synced) return false;
       if (movementFilter !== "all" && (s.movement || "IN") !== movementFilter)
         return false;
       if (!q) return true;
@@ -77,7 +71,7 @@ export default function ScannedHistoryPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [scans, search, syncFilter, movementFilter]);
+  }, [scans, search, movementFilter]);
 
   async function syncPayload(items: LocalScan[]) {
     return apiJson.post<{ success: boolean; synced?: number; error?: string }>(
@@ -128,8 +122,8 @@ export default function ScannedHistoryPage() {
         toast.error(result.error || "Sync failed");
         return;
       }
-      await Storage.markSynced(scan.id);
-      toast.success("Scan synced");
+      await Storage.delete(scan.id);
+      toast.success("Scan synced and removed from local history");
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed");
@@ -156,7 +150,7 @@ export default function ScannedHistoryPage() {
         try {
           const result = await syncPayload([scan]);
           if (result.success && scan.id != null) {
-            await Storage.markSynced(scan.id);
+            await Storage.delete(scan.id);
             done++;
           } else {
             failed++;
@@ -167,12 +161,9 @@ export default function ScannedHistoryPage() {
       }
       toast.success(
         failed
-          ? `${done} synced, ${failed} failed`
-          : `Synced ${done} scans`
+          ? `${done} synced & removed, ${failed} failed`
+          : `Synced and removed ${done} scans`
       );
-      if (done > 0 && failed === 0 && window.confirm("Clear local history after sync?")) {
-        await Storage.clearAll();
-      }
       await reload();
     } finally {
       setSyncing(false);
@@ -185,9 +176,7 @@ export default function ScannedHistoryPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
-              { label: "Total", value: stats.total, variant: "default" as const },
-              { label: "Synced", value: stats.synced, variant: "success" as const },
-              { label: "Not synced", value: stats.unsynced, variant: "warning" as const },
+              { label: "Total local", value: stats.total, variant: "default" as const },
               { label: "Today", value: stats.today, variant: "secondary" as const },
             ] as const
           ).map((item) => (
@@ -248,16 +237,6 @@ export default function ScannedHistoryPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={syncFilter} onValueChange={setSyncFilter}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sync states</SelectItem>
-                <SelectItem value="unsynced">Not synced</SelectItem>
-                <SelectItem value="synced">Synced</SelectItem>
-              </SelectContent>
-            </Select>
             <Select value={movementFilter} onValueChange={setMovementFilter}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
@@ -284,20 +263,19 @@ export default function ScannedHistoryPage() {
                   <TableHead>Expiry</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Movement</TableHead>
-                  <TableHead>Sync</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-muted-foreground">
+                    <TableCell colSpan={9} className="text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-muted-foreground">
+                    <TableCell colSpan={9} className="text-muted-foreground">
                       No local scans yet
                     </TableCell>
                   </TableRow>
@@ -333,13 +311,9 @@ export default function ScannedHistoryPage() {
                           {scan.movement || "IN"}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={scan.synced ? "success" : "destructive"}>
-                          {scan.synced ? "Synced" : "Pending"}
                         </Badge>
                       </TableCell>
                       <TableCell className="space-x-1 text-right">
-                        {!scan.synced && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -352,7 +326,6 @@ export default function ScannedHistoryPage() {
                             <CloudUpload className="h-4 w-4" />
                             {syncingId === scan.id ? "…" : "Sync"}
                           </Button>
-                        )}
                         <Button
                           variant="ghost"
                           size="sm"

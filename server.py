@@ -6,7 +6,65 @@ Uses SQLite3 for user management
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
-import sqlite3
+import libsql_experimental as libsql
+
+class DictRow:
+    def __init__(self, tuple_row, description):
+        self._tuple = tuple_row
+        self._dict = {col[0]: tuple_row[idx] for idx, col in enumerate(description)}
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._tuple[key]
+        return self._dict[key]
+    def keys(self):
+        return self._dict.keys()
+    def get(self, key, default=None):
+        return self._dict.get(key, default)
+    def __getattr__(self, name):
+        try:
+            return self._dict[name]
+        except KeyError:
+            raise AttributeError(name)
+    def __iter__(self):
+        return iter(self._tuple)
+    def __len__(self):
+        return len(self._tuple)
+
+class CursorWrapper:
+    def __init__(self, cursor):
+        self._cursor = cursor
+    def __getattr__(self, attr):
+        return getattr(self._cursor, attr)
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None: return None
+        return DictRow(row, self._cursor.description)
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if not rows: return []
+        desc = self._cursor.description
+        return [DictRow(row, desc) for row in rows]
+    def fetchmany(self, size=None):
+        rows = self._cursor.fetchmany(size) if size else self._cursor.fetchmany()
+        if not rows: return []
+        desc = self._cursor.description
+        return [DictRow(row, desc) for row in rows]
+    def execute(self, sql, parameters=()):
+        if isinstance(parameters, list):
+            parameters = tuple(parameters)
+        return CursorWrapper(self._cursor.execute(sql, parameters))
+
+class ConnectionWrapper:
+    def __init__(self, conn):
+        self._conn = conn
+    def __getattr__(self, attr):
+        return getattr(self._conn, attr)
+    def cursor(self):
+        return CursorWrapper(self._conn.cursor())
+    def execute(self, sql, parameters=()):
+        if isinstance(parameters, list):
+            parameters = tuple(parameters)
+        return CursorWrapper(self._conn.execute(sql, parameters))
 import hashlib
 import os
 import csv
@@ -120,9 +178,10 @@ os.makedirs(SCAN_PHOTOS_DIR, exist_ok=True)
 MAX_SCAN_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    turso_url = os.getenv('TURSO_DB_URL', 'libsql://scanner-rishi-n.aws-ap-south-1.turso.io')
+    turso_token = os.getenv('TURSO_AUTH_TOKEN', 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODYyMTE3NzAsImlkIjoiMDE5ZmUyODQtMWMwMS03ZGU3LThhY2ItOWE1NTUwZmRjZTljIiwia2lkIjoiUkNaOVdPR2hGbXNpNHhtMmd2NF9BM1BHUVhWZk5oN2RrV1h1RXF0MDJTcyIsInJpZCI6IjVmOGI2NTE4LTQzZjEtNGU0Ni1hYzRhLTgzNjhmZDM3YWVjOCJ9.TZ-8H3py5erYBV-lsnXIupKtU_vd_S05AkUdT80FBjLwJRiMvy4gc5a8kSEjkzR0FKxEJiAvSDLsV-fNmZljCg')
+    conn = libsql.connect(turso_url, auth_token=turso_token)
+    return ConnectionWrapper(conn)
 
 def _ensure_permission_tables(cursor):
     cursor.execute('''
@@ -184,7 +243,7 @@ def _ensure_default_permissions(cursor):
     if not lookup:
         return
 
-    cursor.execute('SELECT id, role FROM users WHERE role != "superadmin"')
+    cursor.execute("SELECT id, role FROM users WHERE role != 'superadmin'")
     users = cursor.fetchall()
     for user in users:
         cursor.execute('SELECT COUNT(*) AS count FROM user_permissions WHERE user_id = ?', (user['id'],))
@@ -1346,9 +1405,11 @@ def manage_production_houses():
             room_id = cursor.lastrowid
             conn.close()
             return jsonify({'success': True, 'id': room_id})
-        except sqlite3.IntegrityError:
-            conn.close()
-            return jsonify({'success': False, 'error': 'Production house already exists for this branch'}), 400
+        except Exception as e:
+            if 'UNIQUE constraint failed' in str(e) or 'IntegrityError' in str(type(e)):
+                conn.close()
+                return jsonify({'success': False, 'error': 'Production house already exists for this branch'}), 400
+            raise
 
     cursor.execute('''
         SELECT pr.id, pr.name, pr.branch_id, b.name as branch_name, b.code as branch_code,
