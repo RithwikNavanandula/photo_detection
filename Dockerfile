@@ -9,6 +9,8 @@ RUN npm ci
 COPY web/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV FLASK_ORIGIN=http://127.0.0.1:5000
+# Cap heap so low-RAM Oracle free-tier VMs (1 GB) don't thrash during next build
+ENV NODE_OPTIONS=--max-old-space-size=768
 RUN npm run build
 
 FROM python:3.11-slim-bookworm AS runtime

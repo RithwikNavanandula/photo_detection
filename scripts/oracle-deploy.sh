@@ -18,8 +18,33 @@ if grep -q 'change-me-to-a-long-random-string' .env 2>/dev/null; then
   echo "Generated a random FLASK_SECRET_KEY in .env"
 fi
 
-echo "==> Building and starting (this can take several minutes on Ampere free tier)"
-docker compose up -d --build
+# E2.1.Micro (1 GB) cannot finish `next build` without swap — create 2G if missing
+ensure_swap() {
+  local mem_kb swap_kb
+  mem_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+  swap_kb="$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)"
+  # Only auto-add swap on small VMs (< 2.5 GB RAM) with little/no swap
+  if [ "${mem_kb:-0}" -lt 2500000 ] && [ "${swap_kb:-0}" -lt 1000000 ]; then
+    if [ ! -f /swapfile ]; then
+      echo "==> Low RAM detected — creating 2G swap (needed for Next.js build)"
+      sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress
+      sudo chmod 600 /swapfile
+      sudo mkswap /swapfile
+      sudo swapon /swapfile
+      if ! grep -q '^/swapfile ' /etc/fstab 2>/dev/null; then
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+      fi
+    elif ! swapon --show | grep -q /swapfile; then
+      echo "==> Enabling existing /swapfile"
+      sudo swapon /swapfile
+    fi
+    free -h
+  fi
+}
+ensure_swap
+
+echo "==> Building and starting (first Next.js build can take 10–25 min on 1 GB + swap)"
+DOCKER_BUILDKIT=1 docker compose up -d --build
 
 echo ""
 echo "==> Status"
