@@ -241,6 +241,24 @@ def _can_access_admin_endpoint(endpoint_name):
         return session.get('role') == 'superadmin'
     return _can_access_permission(required)
 
+def _scoped_branch_id(requested_branch_id=None):
+    """Return the requested branch only for superadmins; everyone else is branch-bound."""
+    if session.get('role') == 'superadmin':
+        return requested_branch_id
+    # Branch IDs are positive, so this safely yields no records for malformed users.
+    return session.get('branch_id') or -1
+
+def _can_access_branch(branch_id):
+    """Whether the current session may access a specific branch's records."""
+    if session.get('role') == 'superadmin':
+        return True
+    current_branch_id = session.get('branch_id')
+    return (
+        current_branch_id is not None
+        and branch_id is not None
+        and int(current_branch_id) == int(branch_id)
+    )
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -252,6 +270,13 @@ def _ensure_scan_photo_column(cursor):
     """Add photo_path to scans if missing (existing DBs)."""
     if not _table_has_column(cursor, 'scans', 'photo_path'):
         cursor.execute('ALTER TABLE scans ADD COLUMN photo_path TEXT')
+
+def _ensure_scan_transfer_column(cursor):
+    """Link OUT scans to the transfer request that authorizes the movement."""
+    if not _table_has_column(cursor, 'scans', 'transfer_request_id'):
+        cursor.execute(
+            'ALTER TABLE scans ADD COLUMN transfer_request_id INTEGER REFERENCES transfer_requests(id)'
+        )
 
 def _decode_scan_image(image_data):
     """Accept a data URL or raw base64 string; return image bytes or None."""
@@ -307,28 +332,57 @@ def _delete_scan_photo(filename):
     except OSError:
         pass
 
-def _get_or_create_stock_id(cursor, scan_data, branch_id):
-    """Return a stock row ID for the supplied item identity, creating it if needed."""
-    batch_no = scan_data.get('batch_no') or scan_data.get('batchNo', '')
-    mfg_date = scan_data.get('mfg_date') or scan_data.get('mfgDate', '')
-    expiry_date = scan_data.get('expiry_date') or scan_data.get('expiryDate', '')
-    flavour = scan_data.get('flavour', '')
-    rack_no = scan_data.get('rack_no') or scan_data.get('rackNo', '')
-    shelf_no = scan_data.get('shelf_no') or scan_data.get('shelfNo', '')
+def _stock_identity_values(scan_data):
+    """Return the fields that uniquely identify stock at a branch location."""
+    return (
+        str(scan_data.get('batch_no') or scan_data.get('batchNo', '') or '').strip(),
+        str(scan_data.get('mfg_date') or scan_data.get('mfgDate', '') or '').strip(),
+        str(scan_data.get('expiry_date') or scan_data.get('expiryDate', '') or '').strip(),
+        str(scan_data.get('flavour', '') or '').strip(),
+        str(scan_data.get('rack_no') or scan_data.get('rackNo', '') or '').strip(),
+        str(scan_data.get('shelf_no') or scan_data.get('shelfNo', '') or '').strip(),
+    )
 
+def _incomplete_stock_identity_error(scan_data):
+    """Reject blank identities so unrelated empty scans cannot collapse into one stock row."""
+    batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(scan_data)
+    if all((batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no)):
+        return None
+    return {
+        'success': False,
+        'error': (
+            'Stock Error: Incomplete label details. '
+            'Batch, mfg date, expiry, flavour, rack, and shelf are all required.'
+        ),
+    }
+
+def _find_stock_id(cursor, scan_data, branch_id):
+    """Find stock by the complete physical-label and location identity."""
+    if _incomplete_stock_identity_error(scan_data):
+        return None
+    batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(scan_data)
     cursor.execute('''
         SELECT id FROM stock
         WHERE batch_no = ? AND mfg_date = ? AND expiry_date = ? AND flavour = ?
           AND rack_no = ? AND shelf_no = ? AND branch_id IS ?
     ''', (batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id))
     row = cursor.fetchone()
-    if row:
+    return row['id'] if row else None
+
+def _get_or_create_stock_id(cursor, scan_data, branch_id):
+    """Return a stock row ID for the supplied item identity, creating it if needed."""
+    identity_error = _incomplete_stock_identity_error(scan_data)
+    if identity_error:
+        raise ValueError(identity_error['error'])
+    batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(scan_data)
+    stock_id = _find_stock_id(cursor, scan_data, branch_id)
+    if stock_id:
         cursor.execute('''
             UPDATE stock
             SET updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (row['id'],))
-        return row['id']
+        ''', (stock_id,))
+        return stock_id
 
     cursor.execute('''
         INSERT INTO stock (
@@ -336,6 +390,186 @@ def _get_or_create_stock_id(cursor, scan_data, branch_id):
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, branch_id))
     return cursor.lastrowid
+
+_ACTIVE_TRANSFER_STATUSES_SQL = "('submitted', 'pending')"
+
+def _active_transfer_stock_exclusion_sql(stock_alias='st'):
+    """SQL fragment: stock must not already be on an open transfer request."""
+    return f'''
+          AND NOT EXISTS (
+                SELECT 1
+                FROM production_stock ps
+                JOIN transfer_requests tr ON tr.id = ps.transfer_request_id
+                WHERE ps.stock_id = {stock_alias}.id
+                  AND LOWER(COALESCE(tr.status, '')) IN {_ACTIVE_TRANSFER_STATUSES_SQL}
+          )
+    '''
+
+def _find_active_mapped_stock_ids(cursor, stock_ids):
+    """Return stock IDs already mapped to an open transfer request."""
+    if not stock_ids:
+        return []
+    placeholders = ','.join('?' * len(stock_ids))
+    cursor.execute(
+        f'''
+        SELECT DISTINCT ps.stock_id
+        FROM production_stock ps
+        JOIN transfer_requests tr ON tr.id = ps.transfer_request_id
+        WHERE ps.stock_id IN ({placeholders})
+          AND LOWER(COALESCE(tr.status, '')) IN {_ACTIVE_TRANSFER_STATUSES_SQL}
+        ''',
+        list(stock_ids),
+    )
+    return [row['stock_id'] for row in cursor.fetchall()]
+
+def _unavailable_stock_ids(cursor, stock_ids):
+    """Return stock IDs with no remaining available quantity (IN <= OUT)."""
+    if not stock_ids:
+        return []
+    placeholders = ','.join('?' * len(stock_ids))
+    cursor.execute(
+        f'''
+        SELECT st.id AS stock_id
+        FROM stock st
+        LEFT JOIN scans s ON s.stock_id = st.id
+        WHERE st.id IN ({placeholders})
+        GROUP BY st.id
+        HAVING COALESCE(SUM(CASE WHEN s.movement = 'IN' THEN 1 ELSE 0 END), 0)
+             <= COALESCE(SUM(CASE WHEN s.movement = 'OUT' THEN 1 ELSE 0 END), 0)
+        ''',
+        list(stock_ids),
+    )
+    return [row['stock_id'] for row in cursor.fetchall()]
+
+def _find_active_transfer_request_id(cursor, stock_id, branch_id):
+    """Find an open transfer request that explicitly selected this stock."""
+    cursor.execute('''
+        SELECT tr.id
+        FROM production_stock ps
+        JOIN transfer_requests tr ON tr.id = ps.transfer_request_id
+        WHERE ps.stock_id = ?
+          AND tr.source_branch_id = ?
+          AND LOWER(COALESCE(tr.status, '')) IN ('submitted', 'pending')
+        ORDER BY tr.created_at ASC, tr.id ASC
+        LIMIT 1
+    ''', (stock_id, branch_id))
+    row = cursor.fetchone()
+    return row['id'] if row else None
+
+def _maybe_complete_transfer_request(cursor, transfer_request_id):
+    """Mark a transfer completed once every mapped stock has an OUT scan for it."""
+    if not transfer_request_id:
+        return False
+
+    cursor.execute(
+        'SELECT id, status FROM transfer_requests WHERE id = ?',
+        (transfer_request_id,),
+    )
+    transfer = cursor.fetchone()
+    if not transfer:
+        return False
+    if (transfer['status'] or '').lower() == 'completed':
+        return False
+
+    cursor.execute(
+        'SELECT stock_id FROM production_stock WHERE transfer_request_id = ?',
+        (transfer_request_id,),
+    )
+    mapped_ids = [row['stock_id'] for row in cursor.fetchall()]
+    if not mapped_ids:
+        return False
+
+    placeholders = ','.join('?' * len(mapped_ids))
+    cursor.execute(
+        f'''
+        SELECT COUNT(DISTINCT stock_id) AS out_count
+        FROM scans
+        WHERE transfer_request_id = ?
+          AND movement = 'OUT'
+          AND stock_id IN ({placeholders})
+        ''',
+        [transfer_request_id, *mapped_ids],
+    )
+    out_count = cursor.fetchone()['out_count'] or 0
+    if out_count < len(mapped_ids):
+        return False
+
+    cursor.execute(
+        '''
+        UPDATE transfer_requests
+        SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        ''',
+        (transfer_request_id,),
+    )
+    return True
+
+def _validate_out_stock(cursor, scan_data, branch_id, *, exclude_scan_id=None):
+    """Resolve an OUT scan to available stock with an active transfer assignment."""
+    stock_id = _find_stock_id(cursor, scan_data, branch_id)
+    batch_no, _, _, flavour, rack_no, shelf_no = _stock_identity_values(scan_data)
+    if not stock_id:
+        return None, None, {
+            'success': False,
+            'error': (
+                f'Stock Error: No matching IN record found for Batch {batch_no} '
+                f'({flavour}) at {rack_no}/{shelf_no}.'
+            )
+        }
+
+    query = '''
+        SELECT
+            SUM(CASE WHEN movement = 'IN' THEN 1 ELSE 0 END) AS in_count,
+            SUM(CASE WHEN movement = 'OUT' THEN 1 ELSE 0 END) AS out_count
+        FROM scans WHERE stock_id = ?
+    '''
+    params = [stock_id]
+    if exclude_scan_id is not None:
+        query += ' AND id != ?'
+        params.append(exclude_scan_id)
+    cursor.execute(query, params)
+    counts = cursor.fetchone()
+    if (counts['in_count'] or 0) <= (counts['out_count'] or 0):
+        return None, None, {
+            'success': False,
+            'error': (
+                f'Stock Error: No available stock found for Batch {batch_no} '
+                f'({flavour}) at {rack_no}/{shelf_no}.'
+            )
+        }
+    transfer_request_id = _find_active_transfer_request_id(cursor, stock_id, branch_id)
+    if not transfer_request_id:
+        return None, None, {
+            'success': False,
+            'error': (
+                f'Stock Error: Batch {batch_no} ({flavour}) at {rack_no}/{shelf_no} '
+                'is not assigned to an active transfer request.'
+            )
+        }
+    return stock_id, transfer_request_id, None
+
+def _validate_replacement_out_scans(scans):
+    """Validate a replacement snapshot without relying on its input ordering."""
+    balances = {}
+    for scan in scans:
+        movement = str(scan.get('movement', 'IN')).upper()
+        if movement not in ('IN', 'OUT'):
+            return {'success': False, 'error': 'movement must be IN or OUT'}
+        identity = _stock_identity_values(scan)
+        counts = balances.setdefault(identity, {'in': 0, 'out': 0})
+        counts[movement.lower()] += 1
+
+    for identity, counts in balances.items():
+        if counts['out'] > counts['in']:
+            batch_no, _, _, flavour, rack_no, shelf_no = identity
+            return {
+                'success': False,
+                'error': (
+                    f'Stock Error: No matching IN record found for Batch {batch_no} '
+                    f'({flavour}) at {rack_no}/{shelf_no}.'
+                )
+            }
+    return None
 
 def _get_or_create_production_room_id(cursor, branch_id, room_name='Production Room'):
     """Return a production room id for a branch, creating a default room if needed."""
@@ -441,10 +675,16 @@ def _ensure_inventory_tables(cursor):
             synced_by TEXT,
             branch_id INTEGER,
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            photo_path TEXT
+            photo_path TEXT,
+            transfer_request_id INTEGER REFERENCES transfer_requests(id)
         )
     ''')
     _ensure_scan_photo_column(cursor)
+    _ensure_scan_transfer_column(cursor)
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS IX_scans_stock_movement
+        ON scans (stock_id, movement)
+    ''')
 
 def _prepare_scan_photos(scans):
     """Decode/save photos to disk before DB inserts (keeps payloads out of SQL)."""
@@ -461,8 +701,12 @@ def _prepare_scan_photos(scans):
 def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=False, validate_out=True):
     """Shared scan sync for user and admin endpoints."""
     _ensure_scan_photo_column(cursor)
+    _ensure_scan_transfer_column(cursor)
 
     if replace:
+        validation_error = _validate_replacement_out_scans(scans)
+        if validation_error:
+            return validation_error
         cursor.execute('SELECT photo_path FROM scans WHERE photo_path IS NOT NULL')
         for row in cursor.fetchall():
             _delete_scan_photo(row['photo_path'])
@@ -470,10 +714,28 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
         cursor.execute('DELETE FROM stock')
 
     synced = 0
+    touched_transfer_ids = set()
     for scan in scans:
-        stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
-        movement = scan.get('movement', 'IN')
+        movement = str(scan.get('movement', 'IN')).upper()
+        if movement not in ('IN', 'OUT'):
+            return {'success': False, 'error': 'movement must be IN or OUT'}
+        identity_error = _incomplete_stock_identity_error(scan)
+        if identity_error:
+            return identity_error
         timestamp = scan.get('timestamp', '')
+        transfer_request_id = None
+
+        if movement == 'OUT':
+            # Replacement imports are pre-validated as a complete snapshot and may be unordered.
+            if replace:
+                stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
+            else:
+                stock_id = _find_stock_id(cursor, scan, branch_id)
+                if not stock_id:
+                    _, _, error = _validate_out_stock(cursor, scan, branch_id)
+                    return error
+        else:
+            stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
 
         if not replace:
             cursor.execute('''
@@ -484,22 +746,11 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
                 continue
 
             if validate_out and movement == 'OUT':
-                cursor.execute('''
-                    SELECT movement FROM scans
-                    WHERE stock_id = ?
-                ''', (stock_id,))
-                stock_rows = cursor.fetchall()
-                in_count = sum(1 for r in stock_rows if r['movement'] == 'IN')
-                out_count = sum(1 for r in stock_rows if r['movement'] == 'OUT')
-
-                if in_count <= out_count:
-                    return {
-                        'success': False,
-                        'error': (
-                            f"Stock Error: No available stock found for Batch {scan.get('batchNo')} "
-                            f"({scan.get('flavour')}) at this location."
-                        )
-                    }
+                stock_id, transfer_request_id, error = _validate_out_stock(
+                    cursor, scan, branch_id
+                )
+                if error:
+                    return error
 
         photo_path = scan.get('processed_photo_path')
         if photo_path is None:
@@ -507,26 +758,34 @@ def _sync_scans_to_db(cursor, scans, *, user='Unknown', branch_id=None, replace=
                 scan.get('imageData') or scan.get('photo') or scan.get('image')
             )
 
+        batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(scan)
         cursor.execute('''
             INSERT INTO scans (
                 stock_id, timestamp, batch_no, mfg_date, expiry_date,
-                flavour, rack_no, shelf_no, movement, synced_by, branch_id, photo_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                flavour, rack_no, shelf_no, movement, synced_by, branch_id, photo_path,
+                transfer_request_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             stock_id,
             timestamp,
-            scan.get('batchNo', ''),
-            scan.get('mfgDate', ''),
-            scan.get('expiryDate', ''),
-            scan.get('flavour', ''),
-            scan.get('rackNo', ''),
-            scan.get('shelfNo', ''),
+            batch_no,
+            mfg_date,
+            expiry_date,
+            flavour,
+            rack_no,
+            shelf_no,
             movement,
             user,
             branch_id,
-            photo_path
+            photo_path,
+            transfer_request_id
         ))
+        if transfer_request_id:
+            touched_transfer_ids.add(transfer_request_id)
         synced += 1
+
+    for transfer_id in touched_transfer_ids:
+        _maybe_complete_transfer_request(cursor, transfer_id)
 
     return {'success': True, 'synced': synced}
 
@@ -649,10 +908,16 @@ def init_db():
             synced_by TEXT,
             branch_id INTEGER REFERENCES branches(id),
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            photo_path TEXT
+            photo_path TEXT,
+            transfer_request_id INTEGER REFERENCES transfer_requests(id)
         )
     ''')
     _ensure_scan_photo_column(cursor)
+    _ensure_scan_transfer_column(cursor)
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS IX_scans_stock_movement
+        ON scans (stock_id, movement)
+    ''')
 
     _ensure_truck_table(cursor)
 
@@ -1228,7 +1493,7 @@ def list_branches():
 @login_required
 def list_production_rooms():
     """List production rooms, optionally filtered by branch."""
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
 
     conn = get_db()
     cursor = conn.cursor()
@@ -1288,10 +1553,10 @@ def manage_branches():
     conn.close()
     return jsonify({'branches': branches})
 
-@app.route('/api/admin/branches/<int:branch_id>', methods=['DELETE'])
+@app.route('/api/admin/branches/<int:branch_id>', methods=['PUT', 'DELETE'])
 @superadmin_required
-def delete_branch(branch_id):
-    """Superadmin: Delete a branch if it has no dependent records."""
+def manage_branch(branch_id):
+    """Superadmin: Rename a branch or delete it when it has no dependencies."""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -1300,6 +1565,26 @@ def delete_branch(branch_id):
     if not branch:
         conn.close()
         return jsonify({'success': False, 'error': 'Branch not found'}), 404
+
+    if request.method == 'PUT':
+        data = request.get_json() or {}
+        name = str(data.get('name', '')).strip()
+        if not name:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Branch name required'}), 400
+
+        cursor.execute(
+            'SELECT id FROM branches WHERE LOWER(name) = LOWER(?) AND id != ?',
+            (name, branch_id),
+        )
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': 'Branch name already exists'}), 400
+
+        cursor.execute('UPDATE branches SET name = ? WHERE id = ?', (name, branch_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'branch': {'id': branch_id, 'name': name, 'code': branch['code']}})
 
     dependency_checks = [
         ('users', 'SELECT COUNT(*) AS count FROM users WHERE branch_id = ?', (branch_id,), 'users'),
@@ -1521,7 +1806,7 @@ def change_user_password():
 @admin_required
 def admin_dashboard():
     """Get dashboard data for admin (filtered by branch)"""
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     conn = get_db()
     cursor = conn.cursor()
@@ -1652,7 +1937,7 @@ def admin_dashboard():
     _ensure_scan_photo_column(cursor)
     activity_query = f'''
         SELECT id, timestamp, batch_no as batch, rack_no as rack, shelf_no as shelf,
-               movement, expiry_date, flavour, photo_path
+               movement, mfg_date, expiry_date, flavour, photo_path
         FROM scans{branch_where}
         {order_clause}
         LIMIT 15
@@ -1682,7 +1967,7 @@ def admin_dashboard():
 @admin_required
 def get_analytics():
     """Get analytics data for charts (filtered by branch)"""
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     conn = get_db()
     cursor = conn.cursor()
@@ -1760,7 +2045,7 @@ def get_analytics():
 @admin_required
 def get_expiry_forecast():
     """Get expiry forecast data - items expiring by flavor across 10 weeks"""
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     conn = get_db()
     cursor = conn.cursor()
@@ -1866,7 +2151,7 @@ def get_expiry_items():
     """Get detailed items expiring in a specific week"""
     week = request.args.get('week', type=int)
     flavor = request.args.get('flavor', '')
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     if not week:
         return jsonify({'success': False, 'error': 'Week is required'}), 400
@@ -1952,10 +2237,13 @@ def sync_user_scans():
     """Sync user scan data to central database (adds, doesn't replace)"""
     if not _can_access_permission('sync_scans'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
-    data = request.get_json()
+    data = request.get_json() or {}
     scans = data.get('scans', [])
-    user = data.get('user', 'Unknown')
-    branch_id = data.get('branch_id')  # Get branch from request
+    branch_id = _scoped_branch_id(data.get('branch_id'))
+
+    if session.get('role') != 'superadmin' and branch_id < 1:
+        return jsonify({'success': False, 'error': 'No branch is assigned to this account'}), 403
+    user = session.get('username') or 'Unknown'
     
     # If branch_id is None (e.g. Super Admin), default to 1 (Main Branch)
     if not branch_id:
@@ -1993,7 +2281,7 @@ def sync_user_scans():
     return jsonify(result)
 
 @app.route('/api/admin/sync', methods=['POST'])
-@admin_required
+@superadmin_required
 def sync_scans():
     """Sync scan data from frontend IndexedDB"""
     data = request.get_json()
@@ -2023,7 +2311,7 @@ def sync_scans():
 @admin_required
 def export_data():
     """Export inventory data to CSV"""
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     conn = get_db()
     cursor = conn.cursor()
@@ -2084,7 +2372,7 @@ def export_data():
 @admin_required
 def update_scan():
     """Update a scan record"""
-    data = request.get_json()
+    data = request.get_json() or {}
     scan_id = data.get('id')
     
     if not scan_id:
@@ -2094,30 +2382,59 @@ def update_scan():
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT branch_id FROM scans WHERE id = ?
+        SELECT id, branch_id FROM scans WHERE id = ?
     ''', (
         scan_id,
     ))
     current = cursor.fetchone()
+    if not current:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Scan not found'}), 404
     branch_id = current['branch_id'] if current else None
+    if not _can_access_branch(branch_id):
+        conn.close()
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
 
-    stock_id = _get_or_create_stock_id(cursor, data, branch_id)
+    movement = str(data.get('movement', 'IN')).upper()
+    if movement not in ('IN', 'OUT'):
+        conn.close()
+        return jsonify({'success': False, 'error': 'movement must be IN or OUT'}), 400
 
+    identity_error = _incomplete_stock_identity_error(data)
+    if identity_error:
+        conn.close()
+        return jsonify(identity_error), 400
+
+    if movement == 'OUT':
+        stock_id, transfer_request_id, error = _validate_out_stock(
+            cursor, data, branch_id, exclude_scan_id=scan_id
+        )
+        if error:
+            conn.close()
+            return jsonify(error), 400
+    else:
+        stock_id = _get_or_create_stock_id(cursor, data, branch_id)
+        transfer_request_id = None
+
+    batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(data)
     cursor.execute('''
         UPDATE scans 
-        SET stock_id = ?, batch_no = ?, mfg_date = ?, expiry_date = ?, flavour = ?, rack_no = ?, shelf_no = ?, movement = ?
+        SET stock_id = ?, batch_no = ?, mfg_date = ?, expiry_date = ?, flavour = ?, rack_no = ?, shelf_no = ?, movement = ?, transfer_request_id = ?
         WHERE id = ?
     ''', (
         stock_id,
-        data.get('batch_no', ''),
-        data.get('mfg_date', ''),
-        data.get('expiry_date', ''),
-        data.get('flavour', ''),
-        data.get('rack_no', ''),
-        data.get('shelf_no', ''),
-        data.get('movement', 'IN'),
+        batch_no,
+        mfg_date,
+        expiry_date,
+        flavour,
+        rack_no,
+        shelf_no,
+        movement,
+        transfer_request_id,
         scan_id
     ))
+    if transfer_request_id:
+        _maybe_complete_transfer_request(cursor, transfer_request_id)
     
     conn.commit()
     conn.close()
@@ -2128,30 +2445,56 @@ def update_scan():
 @admin_required
 def add_scan():
     """Add a new scan record manually"""
-    data = request.get_json()
+    data = request.get_json() or {}
     
     conn = get_db()
     cursor = conn.cursor()
     
     from datetime import datetime
     timestamp = datetime.now().strftime('%d/%m/%Y, %I:%M:%S %p')
+    branch_id = _scoped_branch_id(data.get('branch_id'))
+    if session.get('role') != 'superadmin' and branch_id < 1:
+        conn.close()
+        return jsonify({'success': False, 'error': 'No branch is assigned to this account'}), 403
+    movement = str(data.get('movement', 'IN')).upper()
+    if movement not in ('IN', 'OUT'):
+        conn.close()
+        return jsonify({'success': False, 'error': 'movement must be IN or OUT'}), 400
+
+    identity_error = _incomplete_stock_identity_error(data)
+    if identity_error:
+        conn.close()
+        return jsonify(identity_error), 400
+
+    if movement == 'OUT':
+        stock_id, transfer_request_id, error = _validate_out_stock(cursor, data, branch_id)
+        if error:
+            conn.close()
+            return jsonify(error), 400
+    else:
+        stock_id = _get_or_create_stock_id(cursor, data, branch_id)
+        transfer_request_id = None
     
+    batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(data)
     cursor.execute('''
-        INSERT INTO scans (stock_id, timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (stock_id, timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id, transfer_request_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
-        _get_or_create_stock_id(cursor, data, data.get('branch_id')),
+        stock_id,
         timestamp,
-        data.get('batch_no', ''),
-        data.get('mfg_date', ''),
-        data.get('expiry_date', ''),
-        data.get('flavour', ''),
-        data.get('rack_no', ''),
-        data.get('shelf_no', ''),
-        data.get('movement', 'IN'),
+        batch_no,
+        mfg_date,
+        expiry_date,
+        flavour,
+        rack_no,
+        shelf_no,
+        movement,
         data.get('synced_by', 'Admin'),
-        data.get('branch_id')
+        branch_id,
+        transfer_request_id
     ))
+    if transfer_request_id:
+        _maybe_complete_transfer_request(cursor, transfer_request_id)
     
     conn.commit()
     conn.close()
@@ -2162,9 +2505,11 @@ def add_scan():
 @admin_required
 def import_csv():
     """Import multiple scans from CSV data"""
-    data = request.get_json()
+    data = request.get_json() or {}
     scans = data.get('scans', [])
-    branch_id = data.get('branch_id')
+    branch_id = _scoped_branch_id(data.get('branch_id'))
+    if session.get('role') != 'superadmin' and branch_id < 1:
+        return jsonify({'success': False, 'error': 'No branch is assigned to this account'}), 403
     synced_by = data.get('synced_by', 'CSV Import')
     
     if not scans:
@@ -2177,25 +2522,51 @@ def import_csv():
     timestamp = datetime.now().strftime('%d/%m/%Y, %I:%M:%S %p')
     
     imported = 0
+    touched_transfer_ids = set()
     for scan in scans:
-        stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
+        movement = str(scan.get('movement', 'IN')).upper()
+        if movement not in ('IN', 'OUT'):
+            conn.rollback()
+            conn.close()
+            return jsonify({'success': False, 'error': 'movement must be IN or OUT'}), 400
+        identity_error = _incomplete_stock_identity_error(scan)
+        if identity_error:
+            conn.rollback()
+            conn.close()
+            return jsonify(identity_error), 400
+        if movement == 'OUT':
+            stock_id, transfer_request_id, error = _validate_out_stock(cursor, scan, branch_id)
+            if error:
+                conn.rollback()
+                conn.close()
+                return jsonify(error), 400
+        else:
+            stock_id = _get_or_create_stock_id(cursor, scan, branch_id)
+            transfer_request_id = None
+        batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no = _stock_identity_values(scan)
         cursor.execute('''
-            INSERT INTO scans (stock_id, timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO scans (stock_id, timestamp, batch_no, mfg_date, expiry_date, flavour, rack_no, shelf_no, movement, synced_by, branch_id, transfer_request_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             stock_id,
             timestamp,
-            scan.get('batch_no', ''),
-            scan.get('mfg_date', ''),
-            scan.get('expiry_date', ''),
-            scan.get('flavour', ''),
-            scan.get('rack_no', ''),
-            scan.get('shelf_no', ''),
-            scan.get('movement', 'IN'),
+            batch_no,
+            mfg_date,
+            expiry_date,
+            flavour,
+            rack_no,
+            shelf_no,
+            movement,
             synced_by,
-            branch_id
+            branch_id,
+            transfer_request_id
         ))
+        if transfer_request_id:
+            touched_transfer_ids.add(transfer_request_id)
         imported += 1
+
+    for transfer_id in touched_transfer_ids:
+        _maybe_complete_transfer_request(cursor, transfer_id)
     
     conn.commit()
     conn.close()
@@ -2247,7 +2618,7 @@ def proxy_ocr():
 @admin_required
 def delete_scan():
     """Delete a scan record"""
-    data = request.get_json()
+    data = request.get_json() or {}
     scan_id = data.get('id')
     
     if not scan_id:
@@ -2256,8 +2627,14 @@ def delete_scan():
     conn = get_db()
     cursor = conn.cursor()
     _ensure_scan_photo_column(cursor)
-    cursor.execute('SELECT photo_path FROM scans WHERE id = ?', (scan_id,))
+    cursor.execute('SELECT photo_path, branch_id FROM scans WHERE id = ?', (scan_id,))
     row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Scan not found'}), 404
+    if not _can_access_branch(row['branch_id']):
+        conn.close()
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     if row and row['photo_path']:
         _delete_scan_photo(row['photo_path'])
     cursor.execute('DELETE FROM scans WHERE id = ?', (scan_id,))
@@ -2280,11 +2657,8 @@ def get_scan_photo(scan_id):
     if not row or not row['photo_path']:
         return jsonify({'success': False, 'error': 'Photo not found'}), 404
 
-    role = session.get('role')
-    if role != 'superadmin':
-        user_branch = session.get('branch_id')
-        if user_branch is not None and row['branch_id'] is not None and int(row['branch_id']) != int(user_branch):
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if not _can_access_branch(row['branch_id']):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     abs_path = _scan_photo_abs(row['photo_path'])
     if not abs_path:
@@ -2301,7 +2675,7 @@ def get_scan_photo(scan_id):
 @admin_required
 def get_pivot_data():
     """Get flat scan data for pivot dashboard"""
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     conn = get_db()
     cursor = conn.cursor()
@@ -2349,7 +2723,7 @@ def get_transfer_flavors():
     """Get list of available flavors"""
     if not _can_access_permission('create_transfer'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
-    branch_id = request.args.get('branch_id', type=int) or session.get('branch_id')
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     conn = get_db()
     cursor = conn.cursor()
@@ -2374,7 +2748,7 @@ def get_nearest_expiry():
     if not _can_access_permission('create_transfer'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     flavor = request.args.get('flavor')
-    branch_id = request.args.get('branch_id', type=int) # Optional, if we want to limit to specific branch
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     
     if not flavor:
         return jsonify({'success': False, 'error': 'Flavor is required'})
@@ -2396,7 +2770,7 @@ def get_nearest_expiry():
                 (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN') >
                 (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'OUT')
               )
-    '''
+    ''' + _active_transfer_stock_exclusion_sql('st')
     params = [flavor]
     
     if branch_id:
@@ -2475,7 +2849,7 @@ def get_transfer_batches():
     if not _can_access_permission('create_transfer'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     flavor = request.args.get('flavor')
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     quantity = request.args.get('quantity', type=int)
     
     if not flavor:
@@ -2497,7 +2871,7 @@ def get_transfer_batches():
                 (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'IN') >
                 (SELECT COUNT(*) FROM scans s WHERE s.stock_id = st.id AND s.movement = 'OUT')
               )
-    '''
+    ''' + _active_transfer_stock_exclusion_sql('st')
     params = [flavor]
     
     if branch_id:
@@ -2566,8 +2940,7 @@ def create_transfer_request():
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     data = request.get_json()
     
-    quantity = int(data.get('quantity', 1))
-    stock_ids = data.get('stock_ids', [])
+    raw_stock_ids = data.get('stock_ids', [])
     source_branch_id = data.get('source_branch_id')
     destination_type = data.get('destination_type', 'production_room')
     destination_branch_id = data.get('destination_branch_id')
@@ -2575,18 +2948,21 @@ def create_transfer_request():
     truck_id = data.get('truck_id')
     notes = data.get('notes', '')
     
+    if not isinstance(raw_stock_ids, list) or not raw_stock_ids:
+        return jsonify({'success': False, 'error': 'stock_ids and source_branch_id are required'}), 400
+    # Dedupe while preserving order; quantity always matches unique mapped stock.
+    stock_ids = list(dict.fromkeys(raw_stock_ids))
+    quantity = len(stock_ids)
     if quantity < 1:
         return jsonify({'success': False, 'error': 'quantity is required'}), 400
-    if not isinstance(stock_ids, list) or not stock_ids:
-        return jsonify({'success': False, 'error': 'stock_ids and source_branch_id are required'}), 400
     if not source_branch_id:
         return jsonify({'success': False, 'error': 'source_branch_id is required'}), 400
     try:
         source_branch_id = int(source_branch_id)
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'source_branch_id must be a valid branch ID'}), 400
-    if quantity != len(stock_ids):
-        return jsonify({'success': False, 'error': 'quantity must match the number of selected stock items'}), 400
+    if not _can_access_branch(source_branch_id):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     if destination_type not in ('production_room', 'branch'):
         return jsonify({'success': False, 'error': 'Invalid destination type'}), 400
         
@@ -2619,6 +2995,28 @@ def create_transfer_request():
     if any(int(row['branch_id']) != source_branch_id for row in selected_stocks):
         conn.close()
         return jsonify({'success': False, 'error': 'Selected stock items must belong to the same branch'}), 400
+
+    already_mapped = _find_active_mapped_stock_ids(cursor, stock_ids)
+    if already_mapped:
+        conn.close()
+        return jsonify({
+            'success': False,
+            'error': (
+                'One or more stock items are already mapped to an active transfer request '
+                f'(stock ids: {", ".join(str(i) for i in already_mapped)}).'
+            ),
+        }), 400
+
+    unavailable = _unavailable_stock_ids(cursor, stock_ids)
+    if unavailable:
+        conn.close()
+        return jsonify({
+            'success': False,
+            'error': (
+                'One or more stock items have no available quantity '
+                f'(stock ids: {", ".join(str(i) for i in unavailable)}).'
+            ),
+        }), 400
 
     if destination_type == 'production_room':
         if not production_room_id:
@@ -2810,9 +3208,16 @@ def get_transfer_requests():
     params = []
     where_clauses = []
     
-    # Non-superadmin users only see transfers from their branch
+    # Non-superadmin: only transfers involving their branch (source, destination, or room)
     if role != 'superadmin':
-        where_clauses.append('(tr.source_branch_id = ? OR tr.destination_branch_id = ? OR pb.id = ?)')
+        if not current_branch_id:
+            return jsonify({
+                'success': False,
+                'error': 'No branch is assigned to this account',
+            }), 403
+        where_clauses.append(
+            '(tr.source_branch_id = ? OR tr.destination_branch_id = ? OR pb.id = ?)'
+        )
         params.extend([current_branch_id, current_branch_id, current_branch_id])
     
     if status:
@@ -2841,15 +3246,14 @@ def get_transfer_receipts():
     if not _can_access_permission('receive_transfer'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     status = request.args.get('status')
-    branch_id = request.args.get('branch_id', type=int)
+    branch_id = _scoped_branch_id(request.args.get('branch_id', type=int))
     role = session.get('role')
-    current_branch_id = session.get('branch_id')
 
-    if branch_id is None and role != 'superadmin':
-        branch_id = current_branch_id
-
-    if role != 'superadmin' and branch_id != current_branch_id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if role != 'superadmin' and (not branch_id or int(branch_id) < 1):
+        return jsonify({
+            'success': False,
+            'error': 'No branch is assigned to this account',
+        }), 403
 
     conn = get_db()
     cursor = conn.cursor()
@@ -2869,7 +3273,7 @@ def get_transfer_receipts():
         WHERE tr.destination_type = 'branch'
     '''
     params = []
-    if branch_id:
+    if branch_id and int(branch_id) > 0:
         query += ' AND tr.destination_branch_id = ?'
         params.append(branch_id)
     if status:
@@ -2916,9 +3320,16 @@ def get_transfer_receipt_detail(request_id):
         return jsonify({'success': False, 'error': 'Transfer receipt not found'}), 404
 
     receipt = dict(receipt)
-    if role != 'superadmin' and receipt.get('destination_branch_id') != current_branch_id:
-        conn.close()
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if role != 'superadmin':
+        if not current_branch_id:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'No branch is assigned to this account',
+            }), 403
+        if receipt.get('destination_branch_id') != current_branch_id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     cursor.execute('''
         SELECT ps.id as production_stock_id, ps.created_at as selected_at,
@@ -2992,23 +3403,47 @@ def update_transfer_status():
     """Update status of a transfer request (Admin only)"""
     if not _can_access_permission('manage_transfers'):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
-    data = request.get_json()
+    data = request.get_json() or {}
     request_id = data.get('id')
-    new_status = data.get('status')
+    new_status = str(data.get('status') or '').strip().lower()
+    allowed_statuses = {'submitted', 'completed'}
     
     if not request_id or not new_status:
         return jsonify({'success': False, 'error': 'ID and status required'})
+    if new_status not in allowed_statuses:
+        return jsonify({
+            'success': False,
+            'error': 'Status must be submitted or completed',
+        }), 400
         
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT id FROM transfer_requests WHERE id = ?', (request_id,))
-    if not cursor.fetchone():
+    cursor.execute('''
+        SELECT tr.id, tr.source_branch_id, tr.destination_branch_id,
+               pr.branch_id AS production_room_branch_id
+        FROM transfer_requests tr
+        LEFT JOIN production_rooms pr ON pr.id = tr.production_room_id
+        WHERE tr.id = ?
+    ''', (request_id,))
+    transfer = cursor.fetchone()
+    if not transfer:
         conn.close()
         return jsonify({'success': False, 'error': 'Transfer request not found'}), 404
+    if (
+        session.get('role') != 'superadmin'
+        and not any(
+            _can_access_branch(transfer[key])
+            for key in ('source_branch_id', 'destination_branch_id', 'production_room_branch_id')
+        )
+    ):
+        conn.close()
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
 
-    cursor.execute('UPDATE transfer_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
-                   (new_status, request_id))
+    cursor.execute(
+        'UPDATE transfer_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (new_status, request_id),
+    )
     
     conn.commit()
     conn.close()

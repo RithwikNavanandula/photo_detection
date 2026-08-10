@@ -84,7 +84,8 @@ export default function TransferReportsPage() {
               Transfer Requests Report
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Review transfer requests and update their status.
+              Review transfer requests. Status becomes completed when all mapped
+              stock is OUT-scanned.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

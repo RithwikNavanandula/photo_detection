@@ -183,6 +183,14 @@ export default function ScannerPage() {
       toast.error("Nothing to save");
       return;
     }
+    if (!data.mfgDate || !data.expiryDate) {
+      toast.error("Manufacture and expiry dates are mandatory");
+      return;
+    }
+    if (data.expiryDate < data.mfgDate) {
+      toast.error("Expiry date must be after the manufacture date");
+      return;
+    }
     if (!skipValidation && (!data.rackNo || !data.shelfNo)) {
       toast.error("Rack and Shelf are mandatory");
       return;
@@ -454,6 +462,9 @@ export default function ScannerPage() {
                         {confBadge(conf)}
                       </div>
                       <Input
+                        type={key === "mfgDate" || key === "expiryDate" ? "date" : "text"}
+                        required={key === "mfgDate" || key === "expiryDate"}
+                        min={key === "expiryDate" ? form.mfgDate || undefined : undefined}
                         list={key === "rackNo" ? "racks" : key === "shelfNo" ? "shelves" : undefined}
                         value={form[key]}
                         onChange={(e) => setForm({ ...form, [key]: e.target.value })}

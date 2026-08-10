@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { AuthGuard } from "@/components/layout/auth-guard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +49,8 @@ export default function BranchesPage() {
   const queryClient = useQueryClient();
   const [branchName, setBranchName] = useState("");
   const [branchCode, setBranchCode] = useState("");
+  const [editingBranchId, setEditingBranchId] = useState<number | null>(null);
+  const [editingBranchName, setEditingBranchName] = useState("");
   const [houseName, setHouseName] = useState("");
   const [houseBranchId, setHouseBranchId] = useState("");
 
@@ -99,6 +101,27 @@ export default function BranchesPage() {
       }
       toast.success("Branch deleted");
       queryClient.invalidateQueries({ queryKey: ["admin-branches"] });
+      queryClient.invalidateQueries({ queryKey: ["branches"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const renameBranch = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      apiJson.put<{ success: boolean; error?: string }>(
+        `/api/admin/branches/${id}`,
+        { name: name.trim() }
+      ),
+    onSuccess: (res) => {
+      if (!res.success) {
+        toast.error(res.error || "Could not rename branch");
+        return;
+      }
+      toast.success("Branch renamed");
+      setEditingBranchId(null);
+      setEditingBranchName("");
+      queryClient.invalidateQueries({ queryKey: ["admin-branches"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-production-houses"] });
       queryClient.invalidateQueries({ queryKey: ["branches"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -278,30 +301,95 @@ export default function BranchesPage() {
                 ) : (
                   branches.map((b) => (
                     <TableRow key={b.id}>
-                      <TableCell>{b.name}</TableCell>
+                      <TableCell>
+                        {editingBranchId === b.id ? (
+                          <Input
+                            aria-label="Branch name"
+                            value={editingBranchName}
+                            onChange={(e) => setEditingBranchName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && editingBranchName.trim()) {
+                                renameBranch.mutate({ id: b.id, name: editingBranchName });
+                              }
+                              if (e.key === "Escape") {
+                                setEditingBranchId(null);
+                                setEditingBranchName("");
+                              }
+                            }}
+                            autoFocus
+                          />
+                        ) : (
+                          b.name
+                        )}
+                      </TableCell>
                       <TableCell>{b.code}</TableCell>
                       <TableCell>{b.user_count ?? 0}</TableCell>
                       <TableCell>{b.scan_count ?? 0}</TableCell>
                       <TableCell>{b.production_house_count ?? 0}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                `Delete branch ${b.name}? This fails if linked records exist.`
-                              )
-                            ) {
-                              return;
-                            }
-                            deleteBranch.mutate(b.id);
-                          }}
-                          disabled={deleteBranch.isPending}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          {editingBranchId === b.id ? (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  if (!editingBranchName.trim()) {
+                                    toast.error("Branch name required");
+                                    return;
+                                  }
+                                  renameBranch.mutate({ id: b.id, name: editingBranchName });
+                                }}
+                                disabled={renameBranch.isPending}
+                              >
+                                <Check className="h-4 w-4" />
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingBranchId(null);
+                                  setEditingBranchName("");
+                                }}
+                                disabled={renameBranch.isPending}
+                              >
+                                <X className="h-4 w-4" />
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingBranchId(b.id);
+                                setEditingBranchName(b.name);
+                              }}
+                              disabled={deleteBranch.isPending || renameBranch.isPending}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Edit
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  `Delete branch ${b.name}? This fails if linked records exist.`
+                                )
+                              ) {
+                                return;
+                              }
+                              deleteBranch.mutate(b.id);
+                            }}
+                            disabled={deleteBranch.isPending || renameBranch.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

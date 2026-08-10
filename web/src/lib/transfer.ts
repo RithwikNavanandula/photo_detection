@@ -64,13 +64,7 @@ export type TransferRequest = {
   stock_count?: number;
 };
 
-export const TRANSFER_STATUSES = [
-  "submitted",
-  "pending",
-  "approved",
-  "completed",
-  "rejected",
-] as const;
+export const TRANSFER_STATUSES = ["submitted", "completed"] as const;
 
 export function formatDateTime(value?: string | null) {
   if (!value) return "—";
@@ -79,8 +73,10 @@ export function formatDateTime(value?: string | null) {
 }
 
 export function statusLabel(status?: string | null) {
-  const s = (status || "pending").toLowerCase();
-  if (s === "submitted") return "Request Submitted";
+  const s = (status || "submitted").toLowerCase();
+  if (s === "submitted" || s === "pending") return "Submitted";
+  if (s === "completed") return "Completed";
+  if (s === "received") return "Received";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -88,8 +84,7 @@ export function statusBadgeVariant(
   status?: string | null
 ): "default" | "secondary" | "outline" | "success" | "warning" | "destructive" {
   const s = (status || "").toLowerCase();
-  if (s === "completed" || s === "received" || s === "approved") return "success";
-  if (s === "rejected") return "destructive";
+  if (s === "completed" || s === "received") return "success";
   if (s === "submitted" || s === "pending") return "warning";
   return "secondary";
 }

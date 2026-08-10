@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 import { apiJson } from "@/lib/api";
+import { toDateInputValue } from "@/lib/date";
 import { downloadInventoryExport, parseInventoryCsv } from "@/lib/export";
 
 type DashboardStats = {
@@ -62,6 +63,7 @@ type ActivityRow = {
   rack: string | null;
   shelf: string | null;
   movement: string;
+  mfg_date: string | null;
   expiry_date: string | null;
   flavour: string | null;
   has_photo?: boolean;
@@ -193,8 +195,8 @@ export default function AdminDashboardPage() {
     setForm({
       id: row.id,
       batch_no: row.batch || "",
-      mfg_date: "",
-      expiry_date: row.expiry_date || "",
+      mfg_date: toDateInputValue(row.mfg_date),
+      expiry_date: toDateInputValue(row.expiry_date),
       flavour: "",
       rack_no: row.rack || "",
       shelf_no: row.shelf || "",
@@ -204,6 +206,14 @@ export default function AdminDashboardPage() {
   }
 
   async function saveItem() {
+    if (!form.mfg_date || !form.expiry_date) {
+      toast.error("Manufacture and expiry dates are mandatory");
+      return;
+    }
+    if (form.expiry_date < form.mfg_date) {
+      toast.error("Expiry date must be after the manufacture date");
+      return;
+    }
     setSaving(true);
     try {
       if (form.id) {
@@ -533,6 +543,9 @@ export default function AdminDashboardPage() {
                   <div key={key} className="space-y-1">
                     <Label>{label}</Label>
                     <Input
+                      type={key === "mfg_date" || key === "expiry_date" ? "date" : "text"}
+                      required={key === "mfg_date" || key === "expiry_date"}
+                      min={key === "expiry_date" ? form.mfg_date || undefined : undefined}
                       value={form[key]}
                       onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                     />

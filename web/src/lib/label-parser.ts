@@ -145,16 +145,17 @@ export const Parser = {
   normalizeDate(str: string) {
     const m = str.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
     if (!m) return str;
-    const d = m[1];
-    const mo = m[2];
+    const d = m[1].padStart(2, "0");
+    const mo = m[2].padStart(2, "0");
     let y = m[3];
     if (y.length === 2) y = "20" + y;
-    return `${d.padStart(2, "0")}/${mo.padStart(2, "0")}/${y}`;
+    // Native date inputs require ISO dates, not the label's DD/MM/YYYY format.
+    return `${y}-${mo}-${d}`;
   },
 
   toTimestamp(dateStr: string) {
-    const m = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return null;
-    return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
   },
 };

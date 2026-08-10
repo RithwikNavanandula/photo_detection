@@ -80,13 +80,13 @@ export default function PendingRequestsPage() {
               Pending Requests
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Requests that are still waiting to be processed or completed.
+              Open transfer permissions waiting for OUT scans to finish.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="warning" className="gap-1.5 px-3 py-1">
               <Clock3 className="h-3.5 w-3.5" />
-              Pending {rows.length}
+              Open {rows.length}
             </Badge>
             <Button
               variant="outline"
@@ -103,7 +103,7 @@ export default function PendingRequestsPage() {
           <CardHeader>
             <CardTitle>Open queue</CardTitle>
             <CardDescription>
-              Filtered to submitted and pending statuses.
+              Submitted transfers auto-complete when all mapped stock is OUT-scanned.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -184,9 +184,7 @@ export default function PendingRequestsPage() {
                         <TableCell>
                           <div className="space-y-2">
                             <Badge variant={statusBadgeVariant(req.status)}>
-                              {req.status === "submitted"
-                                ? "Pending"
-                                : statusLabel(req.status)}
+                              {statusLabel(req.status)}
                             </Badge>
                             <Select
                               value={req.status || "submitted"}
